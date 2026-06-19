@@ -1,0 +1,9 @@
+# Developer claim (Network) backed by public composite kind XNetwork.
+apiVersion: platform.pettertech.com/v1alpha1
+kind: Network
+metadata:
+  name: payments
+spec:
+  landingZoneRef:
+    name: payments-dev
+  size: small

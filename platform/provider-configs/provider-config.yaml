@@ -1,0 +1,12 @@
+apiVersion: azure.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: Secret
+    secretRef:
+      namespace: crossplane-system
+      name: azure-provider-creds
+      key: credentials
+# TODO: Validate the exact Upjet Azure provider package, apiVersion, and credential shape for the target environment.

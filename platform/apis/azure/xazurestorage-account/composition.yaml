@@ -1,0 +1,217 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xazurestorageaccount
+spec:
+  compositeTypeRef:
+    apiVersion: azure.platform.pettertech.com/v1alpha1
+    kind: XAzureStorageAccount
+  environment:
+    environmentConfigs:
+      - type: Reference
+        ref:
+          name: platform-defaults
+  resources:
+    - name: azure-storage-account
+      base:
+        apiVersion: account.storage.azure.m.upbound.io/v1beta1
+        kind: Account
+        metadata:
+          labels:
+            platform.pettertech.com/resource-role: storage-account
+        spec:
+          forProvider:
+            location: swedencentral
+            resourceGroupName: rg-placeholder
+            accountTier: Standard
+            accountReplicationType: LRS
+            accountKind: StorageV2
+            tags: {}
+          providerConfigRef:
+            name: placeholder
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.providerConfigName
+          toFieldPath: spec.providerConfigRef.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.location
+          toFieldPath: spec.forProvider.location
+          policy:
+            fromFieldPath: Optional
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.azure.defaultRegion
+          toFieldPath: spec.forProvider.location
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.resourceGroupName
+          toFieldPath: spec.forProvider.resourceGroupName
+          policy:
+            fromFieldPath: Optional
+        # Storage account names must be lowercase alphanumeric and are max 24 chars.
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.uid
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+          transforms:
+            - type: string
+              string:
+                fmt: st%.8s
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.naming.storageAccountName
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.geoRedundant
+          toFieldPath: spec.forProvider.accountReplicationType
+          transforms:
+            - type: map
+              map:
+                false: LRS
+                true: GRS
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.access
+          toFieldPath: spec.forProvider.publicNetworkAccessEnabled
+          policy:
+            fromFieldPath: Optional
+          transforms:
+            - type: map
+              map:
+                private: false
+                internal: false
+                public: true
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.implementationTags
+          toFieldPath: spec.forProvider.tags
+          policy:
+            fromFieldPath: Optional
+        - type: ToCompositeFieldPath
+          fromFieldPath: metadata.annotations[crossplane.io/external-name]
+          toFieldPath: status.storageAccountName
+          policy:
+            fromFieldPath: Optional
+    - name: azure-storage-private-endpoint-blob
+      base:
+        apiVersion: privateendpoint.network.azure.m.upbound.io/v1beta1
+        kind: PrivateEndpoint
+        spec:
+          forProvider:
+            location: swedencentral
+            resourceGroupName: rg-placeholder
+            subnetId: /subscriptions/TODO-subscription-id/resourceGroups/TODO-network-rg/providers/Microsoft.Network/virtualNetworks/TODO-vnet/subnets/TODO-private-endpoints
+            privateServiceConnection:
+              - name: storage-blob-psc
+                isManualConnection: false
+                privateConnectionResourceIdSelector:
+                  matchControllerRef: true
+                  matchLabels:
+                    platform.pettertech.com/resource-role: storage-account
+                subresourceNames:
+                  - blob
+            tags: {}
+          providerConfigRef:
+            name: placeholder
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.providerConfigName
+          toFieldPath: spec.providerConfigRef.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.location
+          toFieldPath: spec.forProvider.location
+          policy:
+            fromFieldPath: Optional
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.azure.defaultRegion
+          toFieldPath: spec.forProvider.location
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.resourceGroupName
+          toFieldPath: spec.forProvider.resourceGroupName
+          policy:
+            fromFieldPath: Optional
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.networking.swedencentral.privateEndpoints.subnetId
+          toFieldPath: spec.forProvider.subnetId
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.uid
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+          transforms:
+            - type: string
+              string:
+                fmt: peblob-%.8s
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.implementationTags
+          toFieldPath: spec.forProvider.tags
+          policy:
+            fromFieldPath: Optional
+    - name: azure-storage-private-endpoint-file
+      base:
+        apiVersion: privateendpoint.network.azure.m.upbound.io/v1beta1
+        kind: PrivateEndpoint
+        spec:
+          forProvider:
+            location: swedencentral
+            resourceGroupName: rg-placeholder
+            subnetId: /subscriptions/TODO-subscription-id/resourceGroups/TODO-network-rg/providers/Microsoft.Network/virtualNetworks/TODO-vnet/subnets/TODO-private-endpoints
+            privateServiceConnection:
+              - name: storage-file-psc
+                isManualConnection: false
+                privateConnectionResourceIdSelector:
+                  matchControllerRef: true
+                  matchLabels:
+                    platform.pettertech.com/resource-role: storage-account
+                subresourceNames:
+                  - file
+            tags: {}
+          providerConfigRef:
+            name: placeholder
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.providerConfigName
+          toFieldPath: spec.providerConfigRef.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.location
+          toFieldPath: spec.forProvider.location
+          policy:
+            fromFieldPath: Optional
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.azure.defaultRegion
+          toFieldPath: spec.forProvider.location
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.resourceGroupName
+          toFieldPath: spec.forProvider.resourceGroupName
+          policy:
+            fromFieldPath: Optional
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.networking.swedencentral.privateEndpoints.subnetId
+          toFieldPath: spec.forProvider.subnetId
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.uid
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+          transforms:
+            - type: string
+              string:
+                fmt: pefile-%.8s
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.implementationTags
+          toFieldPath: spec.forProvider.tags
+          policy:
+            fromFieldPath: Optional
+
+# -----------------------------------------------------------------------------
+# XAzureStorageAccount internal Azure implementation (demo scope)
+# -----------------------------------------------------------------------------
+# Includes the minimum managed resources for a storage account and private
+# endpoints (blob and file) using the Upjet m-provider.
+# Demonstrates that the same public->internal layering works for managed
+# resource products beyond networking.
+# TODO: Add private DNS zone group wiring for name resolution.
+# TODO: Source private endpoint subnet IDs from hardened platform config.
+# TODO: Add diagnostics, lifecycle rules, and advanced security hardening.

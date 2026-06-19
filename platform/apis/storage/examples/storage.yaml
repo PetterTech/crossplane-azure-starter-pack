@@ -1,0 +1,9 @@
+apiVersion: platform.pettertech.com/v1alpha1
+kind: Storage
+metadata:
+  name: payments-data
+spec:
+  landingZoneRef:
+    name: payments-dev
+  geo-redundant: false
+  access: private

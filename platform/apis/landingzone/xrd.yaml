@@ -1,0 +1,81 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xlandingzones.platform.pettertech.com
+spec:
+  group: platform.pettertech.com
+  names:
+    kind: XLandingZone
+    plural: xlandingzones
+  claimNames:
+    kind: LandingZone
+    plural: landingzones
+  defaultCompositionRef:
+    name: landingzone
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              description: Desired landing zone intent.
+              required:
+                - application
+                - environment
+                - type
+                - owner
+              properties:
+                application:
+                  type: string
+                  description: Application or workload name.
+                environment:
+                  type: string
+                  description: Deployment environment such as dev, test, or prod.
+                type:
+                  type: string
+                  description: Landing zone intent used to derive internal platform behavior.
+                  default: corp
+                  enum:
+                    - corp
+                    - online
+                owner:
+                  type: object
+                  description: Generic ownership metadata for the platform product.
+                  properties:
+                    team:
+                      type: string
+                    contact:
+                      type: string
+                  required:
+                    - team
+                tags:
+                  type: object
+                  description: Optional cloud-agnostic metadata tags.
+                  additionalProperties:
+                    type: string
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  description: High-level lifecycle phase for this landing zone.
+                networkProfile:
+                  type: string
+                  description: Derived platform network profile for downstream products.
+      additionalPrinterColumns:
+        - name: Type
+          type: string
+          jsonPath: .spec.type
+        - name: Environment
+          type: string
+          jsonPath: .spec.environment
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: NetworkProfile
+          type: string
+          jsonPath: .status.networkProfile

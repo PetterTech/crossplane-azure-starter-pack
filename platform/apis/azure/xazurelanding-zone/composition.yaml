@@ -1,0 +1,55 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xazurelandingzone
+spec:
+  compositeTypeRef:
+    apiVersion: azure.platform.pettertech.com/v1alpha1
+    kind: XAzureLandingZone
+  resources: []
+
+# -----------------------------------------------------------------------------
+# XAzureLandingZone placeholder implementation (demo-only blueprint)
+# -----------------------------------------------------------------------------
+# This composition intentionally keeps `resources` empty until the exact Upjet
+# resource kinds/versions and required fields are validated.
+#
+# Goal: Make the intended Azure landing-zone architecture explicit and readable.
+# Non-goal: Production-ready Azure implementation.
+#
+# TODO 1: Azure subscription vending
+# - Intention: Create or select a subscription dedicated to this landing zone.
+# - Expected output for downstream products: subscription ID in XR status.
+# - Placeholder approach: add a validated Upjet billing/subscription resource.
+#
+# TODO 2: Management group placement
+# - Intention: Attach the landing-zone subscription to the target management group.
+# - Expected behavior: placement derived from platform/admin defaults, not app team input.
+# - Placeholder approach: add a validated Upjet association resource.
+#
+# TODO 3: Landing-zone resource group
+# - Intention: Create the default Azure resource group used by child products.
+# - Expected naming: derived from internal naming inputs and landing-zone identity.
+# - Placeholder approach: add a validated Upjet Resource Group resource.
+#
+# TODO 4: User-assigned managed identity
+# - Intention: Provision a landing-zone-scoped identity for platform operations.
+# - Expected output for downstream products: principal/client IDs in XR status as needed.
+# - Placeholder approach: add a validated Upjet user-assigned identity resource.
+#
+# TODO 5: Role assignment
+# - Intention: Grant least-privilege roles required for child products to operate
+#   in the landing-zone subscription/resource group scope.
+# - Placeholder approach: add validated Upjet role assignment resources.
+#
+# TODO 6: ProviderConfig named after the landing zone
+# - Intention: Ensure child products can patch
+#   spec.landingZoneRef.name -> spec.providerConfigRef.name.
+# - Convention: ProviderConfig name must equal the LandingZone name.
+# - Placeholder approach: render a provider config object from resolved identity
+#   credentials after the identity and role assignment are in place.
+#
+# Demo placeholder note:
+# - If temporary Kubernetes objects are introduced in this composition to
+#   illustrate flow, they must be clearly labeled as demo placeholders and must
+#   not be interpreted as production implementation.

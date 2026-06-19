@@ -1,0 +1,90 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xazurelandingzones.azure.platform.pettertech.com
+spec:
+  group: azure.platform.pettertech.com
+  names:
+    kind: XAzureLandingZone
+    plural: xazurelandingzones
+  defaultCompositionRef:
+    name: xazurelandingzone
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - application
+                - environment
+                - landingZoneType
+                - owner
+                - providerConfigName
+              properties:
+                application:
+                  type: string
+                environment:
+                  type: string
+                landingZoneType:
+                  type: string
+                location:
+                  type: string
+                  description: Azure region used for default resource placement in this landing zone.
+                defaultLocation:
+                  type: string
+                  description: Optional explicit default location used by child Azure products.
+                resourceGroupName:
+                  type: string
+                  description: Default Azure resource group for landing-zone-scoped resources.
+                networkProfile:
+                  type: string
+                  description: Derived internal network profile, such as corp or online.
+                owner:
+                  type: object
+                  properties:
+                    team:
+                      type: string
+                    contact:
+                      type: string
+                naming:
+                  type: object
+                  description: Naming inputs used by internal Azure compositions.
+                  properties:
+                    prefix:
+                      type: string
+                    suffix:
+                      type: string
+                    separator:
+                      type: string
+                tags:
+                  type: object
+                  additionalProperties:
+                    type: string
+                implementationTags:
+                  type: object
+                  description: Internal Azure implementation tags applied to composed resources.
+                  additionalProperties:
+                    type: string
+                providerConfigName:
+                  type: string
+                  description: Must match the LandingZone name.
+            status:
+              type: object
+              properties:
+                providerConfigName:
+                  type: string
+                  description: Name of the generated or selected ProviderConfig for child products.
+                subscriptionId:
+                  type: string
+                  description: Azure subscription ID associated with this landing zone.
+                networkProfile:
+                  type: string
+                  description: Effective network profile exposed for downstream products.
+                defaultLocation:
+                  type: string
+                  description: Effective default Azure location exposed for downstream products.

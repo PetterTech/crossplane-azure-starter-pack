@@ -1,0 +1,69 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xstorages.platform.pettertech.com
+spec:
+  group: platform.pettertech.com
+  names:
+    kind: XStorage
+    plural: xstorages
+  claimNames:
+    kind: Storage
+    plural: storages
+  defaultCompositionRef:
+    name: storage
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              description: Desired storage intent.
+              required:
+                - landingZoneRef
+                - geo-redundant
+                - access
+              properties:
+                landingZoneRef:
+                  type: object
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      description: Name of the LandingZone claim that owns this storage product.
+                geo-redundant:
+                  type: boolean
+                  description: Whether storage should be geo-redundant.
+                  default: false
+                access:
+                  type: string
+                  description: Desired storage access intent.
+                  default: private
+                  enum:
+                    - private
+                    - internal
+                    - public
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  description: High-level lifecycle phase for this storage product.
+      additionalPrinterColumns:
+        - name: LandingZone
+          type: string
+          jsonPath: .spec.landingZoneRef.name
+        - name: GeoRedundant
+          type: boolean
+          jsonPath: .spec['geo-redundant']
+        - name: Access
+          type: string
+          jsonPath: .spec.access
+        - name: Phase
+          type: string
+          jsonPath: .status.phase

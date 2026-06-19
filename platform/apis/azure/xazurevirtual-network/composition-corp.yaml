@@ -1,0 +1,246 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xazurevirtualnetwork-corp
+  labels:
+    # Selected when a LandingZone-derived profile resolves to corp.
+    platform.pettertech.com/network-profile: corp
+spec:
+  compositeTypeRef:
+    apiVersion: azure.platform.pettertech.com/v1alpha1
+    kind: XAzureVirtualNetwork
+  environment:
+    environmentConfigs:
+      - type: Reference
+        ref:
+          name: platform-defaults
+  resources:
+    - name: azure-virtual-network
+      base:
+        apiVersion: virtualnetwork.network.azure.m.upbound.io/v1beta1
+        kind: VirtualNetwork
+        spec:
+          forProvider:
+            location: swedencentral
+            resourceGroupName: rg-placeholder
+            ipAddressPool:
+              id: TODO-ip-address-pool-id
+              numberOfIpAddresses: 256
+            dnsServers:
+              - TODO-azure-firewall-ip
+            tags: {}
+          providerConfigRef:
+            name: placeholder
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.providerConfigName
+          toFieldPath: spec.providerConfigRef.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.location
+          toFieldPath: spec.forProvider.location
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.resourceGroupName
+          toFieldPath: spec.forProvider.resourceGroupName
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.naming.virtualNetworkName
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.implementationTags
+          toFieldPath: spec.forProvider.tags
+          policy:
+            fromFieldPath: Optional
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.networking.swedencentral.azureFirewallIp
+          toFieldPath: spec.forProvider.dnsServers[0]
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.networking.swedencentral.ipam.ipAddressPool
+          toFieldPath: spec.forProvider.ipAddressPool.id
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.size
+          toFieldPath: spec.forProvider.ipAddressPool.numberOfIpAddresses
+          transforms:
+            - type: map
+              map:
+                small: 256
+                medium: 1024
+                large: 4096
+    - name: azure-subnet
+      base:
+        apiVersion: subnet.network.azure.m.upbound.io/v1beta1
+        kind: Subnet
+        spec:
+          forProvider:
+            resourceGroupName: rg-placeholder
+            virtualNetworkName: vnet-placeholder
+            ipAddressPool:
+              id: TODO-ip-address-pool-id
+              numberOfIpAddresses: 256
+            networkSecurityGroupIdSelector:
+              matchControllerRef: true
+          providerConfigRef:
+            name: placeholder
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.providerConfigName
+          toFieldPath: spec.providerConfigRef.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.resourceGroupName
+          toFieldPath: spec.forProvider.resourceGroupName
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.naming.virtualNetworkName
+          toFieldPath: spec.forProvider.virtualNetworkName
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.naming.virtualNetworkName
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+          policy:
+            fromFieldPath: Optional
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-default"
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.networking.swedencentral.ipam.ipAddressPool
+          toFieldPath: spec.forProvider.ipAddressPool.id
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.size
+          toFieldPath: spec.forProvider.ipAddressPool.numberOfIpAddresses
+          transforms:
+            - type: map
+              map:
+                small: 256
+                medium: 1024
+                large: 4096
+    - name: corp-network-security-group
+      base:
+        apiVersion: network.azure.m.upbound.io/v1beta1
+        kind: SecurityGroup
+        spec:
+          forProvider:
+            location: swedencentral
+            resourceGroupName: rg-placeholder
+            securityRule:
+              # Corp NSG allows RFC1918 east-west and web egress.
+              # Deny policy should be enforced centrally in Azure Firewall.
+              - name: allow-rfc1918-10-in
+                priority: 100
+                direction: Inbound
+                access: Allow
+                protocol: "*"
+                sourcePortRange: "*"
+                destinationPortRange: "*"
+                sourceAddressPrefix: 10.0.0.0/8
+                destinationAddressPrefix: "*"
+              - name: allow-rfc1918-172-in
+                priority: 110
+                direction: Inbound
+                access: Allow
+                protocol: "*"
+                sourcePortRange: "*"
+                destinationPortRange: "*"
+                sourceAddressPrefix: 172.16.0.0/12
+                destinationAddressPrefix: "*"
+              - name: allow-rfc1918-192-in
+                priority: 120
+                direction: Inbound
+                access: Allow
+                protocol: "*"
+                sourcePortRange: "*"
+                destinationPortRange: "*"
+                sourceAddressPrefix: 192.168.0.0/16
+                destinationAddressPrefix: "*"
+              - name: allow-rfc1918-10-out
+                priority: 130
+                direction: Outbound
+                access: Allow
+                protocol: "*"
+                sourcePortRange: "*"
+                destinationPortRange: "*"
+                sourceAddressPrefix: "*"
+                destinationAddressPrefix: 10.0.0.0/8
+              - name: allow-rfc1918-172-out
+                priority: 140
+                direction: Outbound
+                access: Allow
+                protocol: "*"
+                sourcePortRange: "*"
+                destinationPortRange: "*"
+                sourceAddressPrefix: "*"
+                destinationAddressPrefix: 172.16.0.0/12
+              - name: allow-rfc1918-192-out
+                priority: 150
+                direction: Outbound
+                access: Allow
+                protocol: "*"
+                sourcePortRange: "*"
+                destinationPortRange: "*"
+                sourceAddressPrefix: "*"
+                destinationAddressPrefix: 192.168.0.0/16
+              - name: allow-http-outbound
+                priority: 200
+                direction: Outbound
+                access: Allow
+                protocol: Tcp
+                sourcePortRange: "*"
+                destinationPortRange: "80"
+                sourceAddressPrefix: "*"
+                destinationAddressPrefix: "*"
+              - name: allow-https-outbound
+                priority: 210
+                direction: Outbound
+                access: Allow
+                protocol: Tcp
+                sourcePortRange: "*"
+                destinationPortRange: "443"
+                sourceAddressPrefix: "*"
+                destinationAddressPrefix: "*"
+            tags: {}
+          providerConfigRef:
+            name: placeholder
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.providerConfigName
+          toFieldPath: spec.providerConfigRef.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.location
+          toFieldPath: spec.forProvider.location
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.resourceGroupName
+          toFieldPath: spec.forProvider.resourceGroupName
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.naming.virtualNetworkName
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+          policy:
+            fromFieldPath: Optional
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-corp-nsg"
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.implementationTags
+          toFieldPath: spec.forProvider.tags
+          policy:
+            fromFieldPath: Optional
+
+# -----------------------------------------------------------------------------
+# XAzureVirtualNetwork corp implementation
+# -----------------------------------------------------------------------------
+# Corp profile depends on shared platform connectivity defaults from EnvironmentConfig
+# and applies stricter network controls (for example NSG rules).
+# TODO: Make regional firewall DNS and IPAM pool lookup dynamic by location once
+# environment-path indirection is added via function step or environment shaping.
+# TODO: Validate `ipAddressPool` field contract for both VirtualNetwork and
+# Subnet in the selected Upjet provider version.

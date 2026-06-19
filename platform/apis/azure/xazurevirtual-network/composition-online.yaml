@@ -1,0 +1,109 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: xazurevirtualnetwork-online
+  labels:
+    # Selected when a LandingZone-derived profile resolves to online.
+    platform.pettertech.com/network-profile: online
+spec:
+  compositeTypeRef:
+    apiVersion: azure.platform.pettertech.com/v1alpha1
+    kind: XAzureVirtualNetwork
+  resources:
+    - name: azure-virtual-network
+      base:
+        apiVersion: virtualnetwork.network.azure.m.upbound.io/v1beta1
+        kind: VirtualNetwork
+        spec:
+          forProvider:
+            location: swedencentral
+            resourceGroupName: rg-placeholder
+            addressSpace:
+              - 10.250.0.0/16
+            tags: {}
+          providerConfigRef:
+            name: placeholder
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.providerConfigName
+          toFieldPath: spec.providerConfigRef.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.location
+          toFieldPath: spec.forProvider.location
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.resourceGroupName
+          toFieldPath: spec.forProvider.resourceGroupName
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.naming.virtualNetworkName
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.implementationTags
+          toFieldPath: spec.forProvider.tags
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.size
+          toFieldPath: spec.forProvider.addressSpace[0]
+          transforms:
+            - type: map
+              map:
+                small: 10.240.0.0/24
+                medium: 10.240.0.0/22
+                large: 10.240.0.0/20
+    - name: azure-subnet
+      base:
+        apiVersion: subnet.network.azure.m.upbound.io/v1beta1
+        kind: Subnet
+        spec:
+          forProvider:
+            resourceGroupName: rg-placeholder
+            virtualNetworkName: vnet-placeholder
+            addressPrefixes:
+              - 10.250.0.0/16
+          providerConfigRef:
+            name: placeholder
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.providerConfigName
+          toFieldPath: spec.providerConfigRef.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.resourceGroupName
+          toFieldPath: spec.forProvider.resourceGroupName
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.naming.virtualNetworkName
+          toFieldPath: spec.forProvider.virtualNetworkName
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.naming.virtualNetworkName
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+          policy:
+            fromFieldPath: Optional
+          transforms:
+            - type: string
+              string:
+                fmt: "%s-default"
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.size
+          toFieldPath: spec.forProvider.addressPrefixes[0]
+          transforms:
+            - type: map
+              map:
+                small: 10.240.0.0/24
+                medium: 10.240.0.0/22
+                large: 10.240.0.0/20
+
+# -----------------------------------------------------------------------------
+# XAzureVirtualNetwork online implementation
+# -----------------------------------------------------------------------------
+# Online is intentionally isolated: no shared hub DNS/firewall dependency and no
+# Azure native IPAM dependency at this layer.
+# This keeps the profile difference internal while the public Network API stays the same.

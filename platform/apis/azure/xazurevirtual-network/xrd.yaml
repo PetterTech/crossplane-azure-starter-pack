@@ -1,0 +1,78 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xazurevirtualnetworks.azure.platform.pettertech.com
+spec:
+  group: azure.platform.pettertech.com
+  names:
+    kind: XAzureVirtualNetwork
+    plural: xazurevirtualnetworks
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - landingZoneRef
+                - providerConfigName
+                - size
+                - networkProfile
+              properties:
+                landingZoneRef:
+                  type: object
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                providerConfigName:
+                  type: string
+                location:
+                  type: string
+                  description: Azure location for virtual network deployment.
+                resourceGroupName:
+                  type: string
+                  description: Azure resource group where network resources are placed.
+                size:
+                  type: string
+                networkProfile:
+                  type: string
+                naming:
+                  type: object
+                  description: Naming inputs used to derive Azure network resource names.
+                  properties:
+                    prefix:
+                      type: string
+                    suffix:
+                      type: string
+                    separator:
+                      type: string
+                    virtualNetworkName:
+                      type: string
+                tags:
+                  type: object
+                  additionalProperties:
+                    type: string
+                implementationTags:
+                  type: object
+                  description: Internal Azure implementation tags applied to managed resources.
+                  additionalProperties:
+                    type: string
+                compositionSelector:
+                  type: object
+                  description: Optional composition selector used to choose corp or online Azure compositions.
+                  properties:
+                    matchLabels:
+                      type: object
+                      additionalProperties:
+                        type: string
+            status:
+              type: object
+              properties:
+                addressSpaceSource:
+                  type: string

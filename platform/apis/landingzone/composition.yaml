@@ -1,0 +1,64 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: landingzone
+spec:
+  compositeTypeRef:
+    apiVersion: platform.pettertech.com/v1alpha1
+    kind: XLandingZone
+  resources:
+    - name: azure-landing-zone
+      base:
+        apiVersion: azure.platform.pettertech.com/v1alpha1
+        kind: XAzureLandingZone
+        spec:
+          # LandingZone establishes scope and defaults used by child products.
+          # TODO: source this from the platform bootstrap config.
+          defaultLocation: TODO_SET_FROM_PLATFORM_CONFIG
+          application: TODO_FROM_PUBLIC_LANDINGZONE
+          environment: TODO_FROM_PUBLIC_LANDINGZONE
+          landingZoneType: TODO_FROM_PUBLIC_LANDINGZONE_TYPE
+          networkProfile: TODO_DERIVE_FROM_PUBLIC_LANDINGZONE_TYPE
+          owner:
+            team: TODO_FROM_PUBLIC_LANDINGZONE_OWNER
+          tags: {}
+          # Convention: child products patch landingZoneRef.name into providerConfigName.
+          providerConfigName: TODO_MATCH_LANDINGZONE_NAME
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: metadata.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.application
+          toFieldPath: spec.application
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.environment
+          toFieldPath: spec.environment
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.type
+          toFieldPath: spec.landingZoneType
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.type
+          toFieldPath: spec.networkProfile
+          transforms:
+            - type: map
+              map:
+                corp: corp
+                online: online
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.owner
+          toFieldPath: spec.owner
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.tags
+          toFieldPath: spec.tags
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.providerConfigName
+        - type: ToCompositeFieldPath
+          fromFieldPath: spec.networkProfile
+          toFieldPath: status.networkProfile
+        - type: ToCompositeFieldPath
+          fromFieldPath: spec.providerConfigName
+          toFieldPath: status.providerConfigName

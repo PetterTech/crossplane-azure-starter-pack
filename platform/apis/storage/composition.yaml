@@ -1,0 +1,39 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: storage
+spec:
+  compositeTypeRef:
+    apiVersion: platform.pettertech.com/v1alpha1
+    kind: XStorage
+  resources:
+    - name: azure-storage-account
+      base:
+        apiVersion: azure.platform.pettertech.com/v1alpha1
+        kind: XAzureStorageAccount
+        spec:
+          # Public product keeps input minimal: just reference landing-zone scope.
+          landingZoneRef:
+            name: placeholder
+          providerConfigName: placeholder
+          geoRedundant: false
+          access: private
+          # TODO: Azure-specific defaults (resource group, account naming, SKU, replication mode)
+          # are intentionally chosen in the internal Azure composition layer.
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: metadata.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.landingZoneRef.name
+          toFieldPath: spec.landingZoneRef.name
+        # ProviderConfig name intentionally matches the LandingZone name.
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.landingZoneRef.name
+          toFieldPath: spec.providerConfigName
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec['geo-redundant']
+          toFieldPath: spec.geoRedundant
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.access
+          toFieldPath: spec.access

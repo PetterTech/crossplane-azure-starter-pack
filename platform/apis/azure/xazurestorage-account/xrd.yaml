@@ -1,0 +1,83 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xazurestorageaccounts.azure.platform.pettertech.com
+spec:
+  group: azure.platform.pettertech.com
+  names:
+    kind: XAzureStorageAccount
+    plural: xazurestorageaccounts
+  defaultCompositionRef:
+    name: xazurestorageaccount
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              required:
+                - landingZoneRef
+                - providerConfigName
+              properties:
+                landingZoneRef:
+                  type: object
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                providerConfigName:
+                  type: string
+                geoRedundant:
+                  type: boolean
+                  description: Cloud-agnostic intent for geo-redundant storage.
+                  default: false
+                access:
+                  type: string
+                  description: Cloud-agnostic access intent.
+                  default: private
+                  enum:
+                    - private
+                    - internal
+                    - public
+                location:
+                  type: string
+                  description: Azure location for the storage account.
+                resourceGroupName:
+                  type: string
+                  description: Azure resource group where the storage account is deployed.
+                purpose:
+                  type: string
+                networkProfile:
+                  type: string
+                  description: Optional network profile for policy and composition behavior.
+                naming:
+                  type: object
+                  description: Naming inputs used to derive Azure storage naming.
+                  properties:
+                    prefix:
+                      type: string
+                    suffix:
+                      type: string
+                    separator:
+                      type: string
+                    storageAccountName:
+                      type: string
+                tags:
+                  type: object
+                  additionalProperties:
+                    type: string
+                implementationTags:
+                  type: object
+                  description: Internal Azure implementation tags applied to managed resources.
+                  additionalProperties:
+                    type: string
+            status:
+              type: object
+              properties:
+                storageAccountName:
+                  type: string

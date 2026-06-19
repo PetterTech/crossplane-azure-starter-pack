@@ -1,0 +1,67 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: CompositeResourceDefinition
+metadata:
+  name: xnetworks.platform.pettertech.com
+spec:
+  group: platform.pettertech.com
+  names:
+    kind: XNetwork
+    plural: xnetworks
+  claimNames:
+    kind: Network
+    plural: networks
+  defaultCompositionRef:
+    name: network
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      schema:
+        openAPIV3Schema:
+          type: object
+          properties:
+            spec:
+              type: object
+              description: Desired network intent.
+              required:
+                - landingZoneRef
+                - size
+              properties:
+                landingZoneRef:
+                  type: object
+                  required:
+                    - name
+                  properties:
+                    name:
+                      type: string
+                      description: Name of the LandingZone claim that owns this network.
+                size:
+                  type: string
+                  description: Desired network size intent.
+                  default: small
+                  enum:
+                    - small
+                    - medium
+                    - large
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  description: High-level lifecycle phase for this network product.
+                networkProfile:
+                  type: string
+                  description: Derived platform network profile used by the implementation layer.
+      additionalPrinterColumns:
+        - name: LandingZone
+          type: string
+          jsonPath: .spec.landingZoneRef.name
+        - name: Size
+          type: string
+          jsonPath: .spec.size
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Profile
+          type: string
+          jsonPath: .status.networkProfile

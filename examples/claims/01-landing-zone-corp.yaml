@@ -1,0 +1,15 @@
+# Developer claim (LandingZone) backed by public composite kind XLandingZone.
+apiVersion: platform.pettertech.com/v1alpha1
+kind: LandingZone
+metadata:
+  name: payments-dev
+spec:
+  application: payments
+  environment: dev
+  type: corp
+  owner:
+    team: payments
+    contact: payments@pettertech.com
+  tags:
+    lifecycle: demo
+    owner: payments

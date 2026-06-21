@@ -58,14 +58,68 @@ Network claim
 
 Network is cloud-agnostic. This starter pack implements Network using Azure. A future implementation can add AWS or GCP internal resources without changing the public Network API.
 
+## Prerequisites
+
+This starter pack assumes you have access to a Kubernetes cluster and `kubectl` context with cluster-admin rights.
+
+Install Crossplane:
+
+```bash
+helm repo add crossplane-stable https://charts.crossplane.io/stable
+helm repo update
+helm upgrade --install crossplane crossplane-stable/crossplane \
+  --namespace crossplane-system \
+  --create-namespace
+```
+
+Install the required Azure providers and function packages:
+
+```yaml
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-family-azure
+spec:
+  package: xpkg.upbound.io/upbound/provider-family-azure:v1
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-network
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-network:v1
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-storage
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-storage:v1
+---
+apiVersion: pkg.crossplane.io/v1beta1
+kind: Function
+metadata:
+  name: function-go-templating
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.9.0
+```
+
+After the package manifest is applied, verify readiness:
+
+```bash
+kubectl get providers.pkg.crossplane.io
+kubectl get functions.pkg.crossplane.io
+```
+
 ## Quick start
 
 1. Clone this repository.
-2. Review the public API shapes in platform/apis/landingzone/xrd.yaml, platform/apis/network/xrd.yaml, and platform/apis/storage/xrd.yaml.
-3. Apply XRDs and compositions.
-4. Apply example claims from examples/claims.
-5. Inspect the claim -> public composite -> internal Azure composite -> managed resource chain.
-6. Adapt platform-admin placeholders to your CAF-aligned environment.
+2. Install Crossplane plus the required providers/functions (see prerequisites above).
+3. Review the public API shapes in platform/apis/landingzone/xrd.yaml, platform/apis/network/xrd.yaml, and platform/apis/storage/xrd.yaml.
+4. Apply XRDs and compositions.
+5. Apply example claims from examples/claims.
+6. Inspect the claim -> public composite -> internal Azure composite -> managed resource chain.
+7. Adapt platform-admin placeholders to your CAF-aligned environment.
 
 Apply admin examples:
 

@@ -314,7 +314,7 @@ crossplane-azure-starter-pack/
         └── platform-config.yaml
 ```
 
-Do not add scripts unless explicitly requested. The user already has a separate way to spin up AKS with Crossplane installed.
+Do not add scripts unless explicitly requested.
 
 ### Initial platform products
 

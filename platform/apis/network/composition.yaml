@@ -8,6 +8,11 @@ spec:
     kind: XNetwork
   mode: Pipeline
   pipeline:
+    # Network is a cloud-agnostic public product.
+    # In this starter pack branch, the implementation target is Azure, so this
+    # composition emits XAzureVirtualNetwork.
+    # A future multi-cloud branch could emit another internal XR instead
+    # (for example XAwsVpc) while keeping the same public Network claim shape.
     - step: derive-azure-network
       functionRef:
         name: function-go-templating
@@ -18,7 +23,8 @@ spec:
         inline:
           template: |
             {{- $xr := .observed.composite.resource -}}
-            {{- /* Read the referenced LandingZone so Network does not duplicate profile input. */ -}}
+            {{- /* Read LandingZone via ExtraResources so Network stays minimal for developers. */ -}}
+            {{- /* Developers only set landingZoneRef.name and size; profile/provider stay internal. */ -}}
             {{- $extraResources := default (dict) .extraResources -}}
             {{- $landingZoneLookup := default (dict "items" (list)) (index $extraResources "landingzone") -}}
             {{- $landingZoneItems := default (list) $landingZoneLookup.items -}}
@@ -26,7 +32,7 @@ spec:
             {{- if gt (len $landingZoneItems) 0 -}}
             {{- $landingZone = index $landingZoneItems 0 -}}
             {{- end -}}
-            {{- /* Prefer derived status.networkProfile; fallback to LandingZone spec.type in early reconcile. */ -}}
+            {{- /* Prefer derived LandingZone status.networkProfile; fallback to LandingZone spec.type early on. */ -}}
             {{- $networkProfile := "TODO-derive-from-landing-zone" -}}
             {{- if and (hasKey $landingZone "status") $landingZone.status.networkProfile -}}
             {{- $networkProfile = $landingZone.status.networkProfile -}}
@@ -45,7 +51,7 @@ spec:
             apiVersion: platform.example.org/v1alpha1
             kind: XNetwork
             status:
-              # TODO: Keep this explicit until the in-cluster ExtraResources lookup is validated.
+              # Educational starter-pack status surface showing resolved profile.
               networkProfile: {{ $networkProfile }}
             ---
             apiVersion: azure.platform.example.org/v1alpha1
@@ -61,7 +67,7 @@ spec:
               providerConfigName: {{ $xr.spec.landingZoneRef.name }}
               size: {{ $xr.spec.size }}
               networkProfile: {{ $networkProfile }}
-              # Internal compositions own corp vs online implementation details.
+              # Internal Azure compositions own corp vs online implementation details.
               compositionSelector:
                 matchLabels:
                   platform.example.org/network-profile: {{ $networkProfile }}

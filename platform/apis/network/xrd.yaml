@@ -22,7 +22,9 @@ spec:
           properties:
             spec:
               type: object
-              description: Desired network intent.
+              description: |
+                Desired cloud-agnostic network intent.
+                This API is developer-facing and intentionally avoids cloud/provider-specific fields.
               required:
                 - landingZoneRef
                 - size
@@ -34,7 +36,7 @@ spec:
                   properties:
                     name:
                       type: string
-                      description: Name of the LandingZone claim that owns this network.
+                      description: Name of the LandingZone claim that owns this network scope.
                 size:
                   type: string
                   description: Desired network size intent.
@@ -51,7 +53,7 @@ spec:
                   description: High-level lifecycle phase for this network product.
                 networkProfile:
                   type: string
-                  description: Derived platform network profile used by the implementation layer.
+                  description: Derived internal profile used by implementation layers (for example Azure today).
       additionalPrinterColumns:
         - name: LandingZone
           type: string

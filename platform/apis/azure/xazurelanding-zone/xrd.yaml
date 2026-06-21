@@ -82,6 +82,9 @@ spec:
                 subscriptionId:
                   type: string
                   description: Azure subscription ID associated with this landing zone.
+                identityPrincipalId:
+                  type: string
+                  description: Principal ID of the central user-assigned identity used for landing-zone role assignments.
                 networkProfile:
                   type: string
                   description: Effective network profile exposed for downstream products.

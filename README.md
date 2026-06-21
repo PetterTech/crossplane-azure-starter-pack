@@ -96,6 +96,41 @@ metadata:
 spec:
   package: xpkg.upbound.io/upbound/provider-azure-storage:v1
 ---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-subscription
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-subscription:v1
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-management
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-management:v1
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-resourcegroup
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-resourcegroup:v1
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-managedidentity
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-managedidentity:v1
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-authorization
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-authorization:v1
+---
 apiVersion: pkg.crossplane.io/v1beta1
 kind: Function
 metadata:
@@ -103,6 +138,16 @@ metadata:
 spec:
   package: xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.9.0
 ```
+
+The exact provider package names can vary by Upbound release. If your registry
+does not contain one of the package names above, use the corresponding
+provider-azure family package that exposes these API groups:
+
+- `subscription.azure.m.upbound.io`
+- `management.azure.m.upbound.io`
+- `resourcegroup.azure.m.upbound.io`
+- `managedidentity.azure.m.upbound.io`
+- `authorization.azure.m.upbound.io`
 
 After the package manifest is applied, verify readiness:
 

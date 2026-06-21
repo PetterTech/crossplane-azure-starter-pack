@@ -6,50 +6,205 @@ spec:
   compositeTypeRef:
     apiVersion: azure.platform.example.org/v1alpha1
     kind: XAzureLandingZone
-  resources: []
+  environment:
+    environmentConfigs:
+      - type: Reference
+        ref:
+          name: platform-defaults
+  resources:
+    - name: azure-subscription
+      base:
+        apiVersion: subscription.azure.m.upbound.io/v1beta1
+        kind: Subscription
+        spec:
+          forProvider:
+            billingScopeId: TODO-billing-scope-id
+            subscriptionName: landing-zone
+            workload: DevTest
+          providerConfigRef:
+            name: default
+      patches:
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.azure.billingScope
+          toFieldPath: spec.forProvider.billingScopeId
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.forProvider.subscriptionName
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.environment
+          toFieldPath: spec.forProvider.workload
+          policy:
+            fromFieldPath: Optional
+          transforms:
+            - type: map
+              map:
+                dev: DevTest
+                test: DevTest
+                prod: Production
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.subscriptionId
+          toFieldPath: status.subscriptionId
+          policy:
+            fromFieldPath: Optional
+        - type: ToCompositeFieldPath
+          fromFieldPath: spec.forProvider.subscriptionName
+          toFieldPath: status.providerConfigName
+
+    - name: landingzone-management-group-association
+      base:
+        apiVersion: management.azure.m.upbound.io/v1beta1
+        kind: ManagementGroupSubscriptionAssociation
+        spec:
+          forProvider:
+            managementGroupId: TODO-management-group-id
+            subscriptionId: TODO-subscription-id
+          providerConfigRef:
+            name: default
+      patches:
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.azure.managementGroups.landingZones
+          toFieldPath: spec.forProvider.managementGroupId
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.subscriptionId
+          toFieldPath: spec.forProvider.subscriptionId
+          policy:
+            fromFieldPath: Required
+
+    - name: landingzone-resource-group
+      base:
+        apiVersion: resourcegroup.azure.m.upbound.io/v1beta1
+        kind: ResourceGroup
+        spec:
+          forProvider:
+            location: swedencentral
+            subscriptionId: TODO-subscription-id
+            name: rg-landing-zone
+            tags: {}
+          providerConfigRef:
+            name: default
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.subscriptionId
+          toFieldPath: spec.forProvider.subscriptionId
+          policy:
+            fromFieldPath: Required
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.azure.defaultRegion
+          toFieldPath: spec.forProvider.location
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.location
+          toFieldPath: spec.forProvider.location
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.forProvider.name
+          transforms:
+            - type: string
+              string:
+                fmt: rg-%s
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.resourceGroupName
+          toFieldPath: spec.forProvider.name
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.implementationTags
+          toFieldPath: spec.forProvider.tags
+          policy:
+            fromFieldPath: Optional
+        - type: ToCompositeFieldPath
+          fromFieldPath: spec.forProvider.location
+          toFieldPath: status.defaultLocation
+          policy:
+            fromFieldPath: Optional
+
+    - name: landingzone-user-assigned-identity
+      base:
+        apiVersion: managedidentity.azure.m.upbound.io/v1beta1
+        kind: UserAssignedIdentity
+        spec:
+          forProvider:
+            location: swedencentral
+            subscriptionId: TODO-central-subscription-id
+            resourceGroupName: rg-platform-identities
+            tags: {}
+          providerConfigRef:
+            name: default
+      patches:
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.azure.identity.subscriptionId
+          toFieldPath: spec.forProvider.subscriptionId
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.azure.identity.resourceGroupName
+          toFieldPath: spec.forProvider.resourceGroupName
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.azure.defaultRegion
+          toFieldPath: spec.forProvider.location
+          policy:
+            fromFieldPath: Optional
+        - type: FromEnvironmentFieldPath
+          fromFieldPath: data.azure.identity.location
+          toFieldPath: spec.forProvider.location
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+          transforms:
+            - type: string
+              string:
+                fmt: uami-%s
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.implementationTags
+          toFieldPath: spec.forProvider.tags
+          policy:
+            fromFieldPath: Optional
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.principalId
+          toFieldPath: status.identityPrincipalId
+          policy:
+            fromFieldPath: Optional
+
+    - name: landingzone-subscription-owner-assignment
+      base:
+        apiVersion: authorization.azure.m.upbound.io/v1beta1
+        kind: RoleAssignment
+        spec:
+          forProvider:
+            principalId: TODO-principal-id
+            roleDefinitionName: Owner
+            scope: /subscriptions/TODO-subscription-id
+          providerConfigRef:
+            name: default
+      patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.uid
+          toFieldPath: metadata.annotations[crossplane.io/external-name]
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.subscriptionId
+          toFieldPath: spec.forProvider.scope
+          policy:
+            fromFieldPath: Required
+          transforms:
+            - type: string
+              string:
+                fmt: /subscriptions/%s
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.identityPrincipalId
+          toFieldPath: spec.forProvider.principalId
+          policy:
+            fromFieldPath: Required
 
 # -----------------------------------------------------------------------------
-# XAzureLandingZone placeholder implementation (starter-pack blueprint)
+# XAzureLandingZone implementation (starter-pack scope)
 # -----------------------------------------------------------------------------
-# This composition intentionally keeps `resources` empty until the exact Upjet
-# resource kinds/versions and required fields are validated.
+# Creates a subscription, associates it with a management group, creates the
+# landing-zone resource group, provisions a central user-assigned managed
+# identity in an existing centrally managed resource group, and grants that
+# identity Owner on the new subscription.
 #
-# Goal: Make the intended Azure landing-zone architecture explicit and readable.
-# Non-goal: Production-ready Azure implementation.
-#
-# TODO 1: Azure subscription vending
-# - Intention: Create or select a subscription dedicated to this landing zone.
-# - Expected output for downstream products: subscription ID in XR status.
-# - Placeholder approach: add a validated Upjet billing/subscription resource.
-#
-# TODO 2: Management group placement
-# - Intention: Attach the landing-zone subscription to the target management group.
-# - Expected behavior: placement derived from platform/admin defaults, not app team input.
-# - Placeholder approach: add a validated Upjet association resource.
-#
-# TODO 3: Landing-zone resource group
-# - Intention: Create the default Azure resource group used by child products.
-# - Expected naming: derived from internal naming inputs and landing-zone identity.
-# - Placeholder approach: add a validated Upjet Resource Group resource.
-#
-# TODO 4: User-assigned managed identity
-# - Intention: Provision a landing-zone-scoped identity for platform operations.
-# - Expected output for downstream products: principal/client IDs in XR status as needed.
-# - Placeholder approach: add a validated Upjet user-assigned identity resource.
-#
-# TODO 5: Role assignment
-# - Intention: Grant least-privilege roles required for child products to operate
-#   in the landing-zone subscription/resource group scope.
-# - Placeholder approach: add validated Upjet role assignment resources.
-#
-# TODO 6: ProviderConfig named after the landing zone
-# - Intention: Ensure child products can patch
-#   spec.landingZoneRef.name -> spec.providerConfigRef.name.
-# - Convention: ProviderConfig name must equal the LandingZone name.
-# - Placeholder approach: render a provider config object from resolved identity
-#   credentials after the identity and role assignment are in place.
-#
-# Starter-pack placeholder note:
-# - If temporary Kubernetes objects are introduced in this composition to
-#   illustrate flow, they must be clearly labeled as placeholders and must not
-#   be interpreted as production implementation.
+# TODO: Add secure credential flow and generated ProviderConfig lifecycle where
+# ProviderConfig name equals the landing zone name for child products.

@@ -12,6 +12,10 @@ data:
       corp: <corp-management-group-id>
       online: <online-management-group-id>
     billingScope: <billing-scope>
+    identity:
+      subscriptionId: <central-identity-subscription-id>
+      resourceGroupName: <central-identity-resource-group-name>
+      location: <central-identity-location>
     namingPrefix: <naming-prefix>
   networking:
     swedencentral:

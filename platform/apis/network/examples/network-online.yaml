@@ -1,8 +1,8 @@
-apiVersion: platform.pettertech.com/v1alpha1
+apiVersion: platform.example.org/v1alpha1
 kind: Network
 metadata:
-  name: storefront
+  name: orders
 spec:
   landingZoneRef:
-    name: storefront-prod
+    name: orders-prod
   size: medium

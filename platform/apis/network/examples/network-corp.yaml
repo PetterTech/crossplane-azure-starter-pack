@@ -1,4 +1,4 @@
-apiVersion: platform.pettertech.com/v1alpha1
+apiVersion: platform.example.org/v1alpha1
 kind: Network
 metadata:
   name: payments

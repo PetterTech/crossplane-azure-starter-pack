@@ -1,5 +1,5 @@
 # Developer claim (Storage) backed by public composite kind XStorage.
-apiVersion: platform.pettertech.com/v1alpha1
+apiVersion: platform.example.org/v1alpha1
 kind: Storage
 metadata:
   name: payments-data

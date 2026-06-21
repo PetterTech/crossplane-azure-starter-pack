@@ -4,10 +4,10 @@ metadata:
   name: xazurevirtualnetwork-online
   labels:
     # Selected when a LandingZone-derived profile resolves to online.
-    platform.pettertech.com/network-profile: online
+    platform.example.org/network-profile: online
 spec:
   compositeTypeRef:
-    apiVersion: azure.platform.pettertech.com/v1alpha1
+    apiVersion: azure.platform.example.org/v1alpha1
     kind: XAzureVirtualNetwork
   resources:
     - name: azure-virtual-network

@@ -1,4 +1,4 @@
-apiVersion: platform.pettertech.com/v1alpha1
+apiVersion: platform.example.org/v1alpha1
 kind: LandingZone
 metadata:
   name: payments-dev
@@ -8,7 +8,7 @@ spec:
   type: corp
   owner:
     team: payments
-    contact: payments@pettertech.com
+    contact: payments@example.com
   tags:
     cost-center: cc-1001
-    lifecycle: demo
+    lifecycle: dev

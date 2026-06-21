@@ -1,35 +1,46 @@
 # Architecture
 
-This starter pack demonstrates a layered Crossplane architecture for exposing simple platform products while keeping Azure implementation details internal.
+This repository follows a layered Crossplane model that keeps developer APIs cloud-agnostic and places Azure implementation details behind internal contracts.
 
-## Layers
+## Layered model
 
-1. Developer-facing claims in `platform.pettertech.com/v1alpha1`
-2. Public platform composites in the same API group
-3. Public platform compositions
-4. Small selector or decision logic where needed
-5. Internal Azure composites in `azure.platform.pettertech.com/v1alpha1`
-6. Azure-specific internal compositions
-7. Azure managed resources later
+```text
+Developer-facing claim
+	-> public platform composite resource
+	-> public platform composition
+	-> internal Azure composite resource
+	-> internal Azure composition
+	-> Azure managed resources
+```
 
-## Why the split matters
+## Layers in this starter pack
 
-The public claim API is for developers and application teams. It describes outcomes, not Azure mechanics.
+1. Developer-facing claims and public composites in platform.example.org/v1alpha1.
+2. Public platform compositions that translate intent into internal implementation inputs.
+3. Internal Azure composites in azure.platform.example.org/v1alpha1.
+4. Azure-specific compositions and managed resources.
 
-The public composite API is the platform-owned contract behind those claims.
+## Why this split matters
 
-The internal Azure API is for platform engineers. It carries implementation-specific fields and provider wiring that the public API should not expose.
+- App teams work with product intent, not cloud mechanics.
+- Platform engineers can iterate on Azure implementation details without breaking public APIs.
+- The same public API shape can support future AWS or GCP internal branches.
 
-## Product flow used in the demo
+## Azure branch today
 
-`LandingZone` establishes scope for an application environment and the provider config naming convention used by child products.
+Example flow in this repository:
 
-`Network` references `LandingZone` and derives internal profile behavior. Developers do not provide CIDR ranges, routing inputs, or profile duplication.
+```text
+Network claim
+	-> XNetwork
+	-> XAzureVirtualNetwork
+	-> Azure VNet resources
+```
 
-`Storage` references `LandingZone` and maps to Azure managed resources, proving the pattern is reusable beyond networking.
+Network is cloud-agnostic. This starter pack currently provides the Azure implementation.
 
-## Composition strategy
+## Composition approach
 
-- Use declarative patching by default.
-- Use Go templating only where small decision logic is required (currently `Network` profile selection).
-- Keep placeholders explicit where Azure details still need validation.
+- Prefer patch-and-transform compositions.
+- Use Go templating only where patch-and-transform is insufficient.
+- Keep placeholders and TODOs explicit where provider schema validation or production hardening is still pending.

@@ -4,12 +4,12 @@ metadata:
   name: storage
 spec:
   compositeTypeRef:
-    apiVersion: platform.pettertech.com/v1alpha1
+    apiVersion: platform.example.org/v1alpha1
     kind: XStorage
   resources:
     - name: azure-storage-account
       base:
-        apiVersion: azure.platform.pettertech.com/v1alpha1
+        apiVersion: azure.platform.example.org/v1alpha1
         kind: XAzureStorageAccount
         spec:
           # Public product keeps input minimal: just reference landing-zone scope.

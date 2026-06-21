@@ -6,9 +6,9 @@ The starter pack begins with three public products and three internal Azure impl
 
 Each public product has a developer-facing claim kind and a platform-owned composite kind:
 
-- `LandingZone` claim -> `XLandingZone` composite
-- `Network` claim -> `XNetwork` composite
-- `Storage` claim -> `XStorage` composite
+- LandingZone claim -> XLandingZone composite
+- Network claim -> XNetwork composite
+- Storage claim -> XStorage composite
 
 ### LandingZone
 
@@ -34,7 +34,7 @@ Developer inputs:
 - optional `tags`
 
 The public API intentionally does not ask for CIDR blocks or address space.
-The platform derives profile-specific behavior (`corp` vs `online`) from the referenced `LandingZone`.
+The platform derives profile-specific behavior (corp vs online) from the referenced LandingZone.
 
 ### Storage
 
@@ -49,6 +49,8 @@ Developer inputs:
 
 This product demonstrates the same layered pattern for managed resources, not only networking.
 
+Public APIs stay cloud-agnostic. This repository currently maps them to Azure internal products.
+
 ## Internal Azure products
 
 ### XAzureLandingZone
@@ -61,4 +63,4 @@ Carries Azure-specific network behavior and selects either the `corp` or `online
 
 ### XAzureStorageAccount
 
-Carries Azure-specific storage account behavior and related managed resources (for demo scope).
+Carries Azure-specific storage account behavior and related managed resources for starter-pack scope.

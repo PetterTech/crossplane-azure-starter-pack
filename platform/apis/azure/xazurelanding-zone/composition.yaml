@@ -4,12 +4,12 @@ metadata:
   name: xazurelandingzone
 spec:
   compositeTypeRef:
-    apiVersion: azure.platform.pettertech.com/v1alpha1
+    apiVersion: azure.platform.example.org/v1alpha1
     kind: XAzureLandingZone
   resources: []
 
 # -----------------------------------------------------------------------------
-# XAzureLandingZone placeholder implementation (demo-only blueprint)
+# XAzureLandingZone placeholder implementation (starter-pack blueprint)
 # -----------------------------------------------------------------------------
 # This composition intentionally keeps `resources` empty until the exact Upjet
 # resource kinds/versions and required fields are validated.
@@ -49,7 +49,7 @@ spec:
 # - Placeholder approach: render a provider config object from resolved identity
 #   credentials after the identity and role assignment are in place.
 #
-# Demo placeholder note:
+# Starter-pack placeholder note:
 # - If temporary Kubernetes objects are introduced in this composition to
-#   illustrate flow, they must be clearly labeled as demo placeholders and must
-#   not be interpreted as production implementation.
+#   illustrate flow, they must be clearly labeled as placeholders and must not
+#   be interpreted as production implementation.

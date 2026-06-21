@@ -1,9 +1,9 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xazurevirtualnetworks.azure.platform.pettertech.com
+  name: xazurevirtualnetworks.azure.platform.example.org
 spec:
-  group: azure.platform.pettertech.com
+  group: azure.platform.example.org
   names:
     kind: XAzureVirtualNetwork
     plural: xazurevirtualnetworks

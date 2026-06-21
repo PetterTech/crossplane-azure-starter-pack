@@ -1,72 +1,80 @@
 # Crossplane Azure Starter Pack
 
-This repository is a conference-demo starter pack for showing how platform teams can expose simple, cloud-agnostic products while keeping Azure implementation details internal.
+This repository is a reusable starter pack for building developer-friendly Azure platform APIs with Crossplane. It shows how a platform team can expose simple claims such as LandingZone, Network, and Storage while hiding Azure-specific implementation details behind internal compositions.
 
-It focuses on:
+It is designed for platform engineers who want to learn the pattern, adapt it to their own environment, and contribute improvements back to the project.
 
-- clear story and demo flow
-- clean public product APIs for developers
-- internal Azure APIs and compositions for platform engineers
-- small, readable examples that show the layering pattern
+## What this solves
 
-## Demo story in one minute
+- A clean public API contract for application teams.
+- A layered composition model that keeps Azure details internal.
+- A practical reference implementation for Azure using Crossplane.
+- Small examples that are easy to run, inspect, and modify.
 
-1. Developers request products using simple, cloud-agnostic claims.
-2. Claims bind to public platform composites (`XLandingZone`, `XNetwork`, `XStorage`).
-3. `LandingZone` establishes scope and shared defaults for later products.
-4. `Network` references `LandingZone` and does not repeat environment/profile details.
-5. Public platform composites create internal Azure composites.
-6. Internal Azure compositions choose `corp` or `online` behavior.
-7. `Storage` follows the same pattern, proving this scales beyond networking.
+## What this does not solve yet
 
-## Public platform APIs (developer-facing)
+- Full production hardening.
+- Complete enterprise governance integration.
+- Turnkey CI/CD, GitOps, or policy framework setup.
 
-The developer-facing API group is `platform.pettertech.com/v1alpha1`.
+See docs/non-goals.md for details.
 
-Initial products:
+## Public API first
 
-- Claim kinds: `LandingZone`, `Network`, `Storage`
-- Composite kinds: `XLandingZone`, `XNetwork`, `XStorage`
+Public APIs are cloud-agnostic and developer-facing.
 
-These APIs describe intent and intentionally hide Azure-specific details such as subscription IDs, resource group names, CIDR strategy, and provider config wiring.
+- API group: platform.example.org/v1alpha1
+- Claim kinds: LandingZone, Network, Storage
+- Composite kinds: XLandingZone, XNetwork, XStorage
 
-## Internal Azure APIs (platform-owned)
+These APIs describe intent and intentionally do not expose Azure implementation mechanics such as subscription IDs, resource group names, provider wiring, or CIDR strategy.
 
-The internal implementation API group is `azure.platform.pettertech.com/v1alpha1`.
+## Azure implementation layer
 
-Initial internal products:
+This starter pack currently implements the Azure branch behind the public API contract.
 
-- `XAzureLandingZone`
-- `XAzureVirtualNetwork`
-- `XAzureStorageAccount`
+- Internal API group: azure.platform.example.org/v1alpha1
+- Internal kinds: XAzureLandingZone, XAzureVirtualNetwork, XAzureStorageAccount
 
-These APIs contain Azure implementation concerns behind the public API boundary.
-
-## Layered model
+Layered model:
 
 ```text
 Developer-facing claim
   -> public platform composite resource
-  -> public composition
+  -> public platform composition
   -> internal Azure composite resource
   -> internal Azure composition
   -> Azure managed resources
 ```
 
-`Network` includes a placeholder Go templating step because it needs to read its referenced `LandingZone` and derive an internal network profile.
+Example:
 
-## Conference demo flow
+```text
+Network claim
+  -> XNetwork
+  -> XAzureVirtualNetwork
+  -> Azure VNet resources
+```
 
-The manifests under `examples/claims/` are the developer-facing entry point.
+Network is cloud-agnostic. This starter pack implements Network using Azure. A future implementation can add AWS or GCP internal resources without changing the public Network API.
 
-### 1) Apply admin prerequisites (platform engineer step)
+## Quick start
+
+1. Clone this repository.
+2. Review the public API shapes in platform/apis/landingzone/xrd.yaml, platform/apis/network/xrd.yaml, and platform/apis/storage/xrd.yaml.
+3. Apply XRDs and compositions.
+4. Apply example claims from examples/claims.
+5. Inspect the claim -> public composite -> internal Azure composite -> managed resource chain.
+6. Adapt platform-admin placeholders to your CAF-aligned environment.
+
+Apply admin examples:
 
 ```bash
 kubectl apply -f examples/platform-admin/platform-config.yaml
 kubectl apply -f examples/platform-admin/provider-config.yaml
 ```
 
-### 2) Apply XRDs
+Apply XRDs and compositions:
 
 ```bash
 kubectl apply -f platform/apis/landingzone/xrd.yaml
@@ -75,11 +83,7 @@ kubectl apply -f platform/apis/storage/xrd.yaml
 kubectl apply -f platform/apis/azure/xazurelanding-zone/xrd.yaml
 kubectl apply -f platform/apis/azure/xazurevirtual-network/xrd.yaml
 kubectl apply -f platform/apis/azure/xazurestorage-account/xrd.yaml
-```
 
-### 3) Apply compositions
-
-```bash
 kubectl apply -f platform/functions/function-go-templating.yaml
 kubectl apply -f platform/apis/landingzone/composition.yaml
 kubectl apply -f platform/apis/network/composition.yaml
@@ -90,7 +94,7 @@ kubectl apply -f platform/apis/azure/xazurevirtual-network/composition-online.ya
 kubectl apply -f platform/apis/azure/xazurestorage-account/composition.yaml
 ```
 
-### 4) Apply developer claims in dependency order
+Apply claims:
 
 ```bash
 kubectl apply -f examples/claims/01-landing-zone-corp.yaml
@@ -98,52 +102,45 @@ kubectl apply -f examples/claims/02-network-corp.yaml
 kubectl apply -f examples/claims/05-storage.yaml
 ```
 
-Talk track:
+## Maturity
 
-- `LandingZone` first: establishes product scope and shared identity/provider convention.
-- `Network` next: references `LandingZone` by name and inherits profile context.
-- `Storage` last: proves the same model works for managed resource products too.
+This project is a starter pack and reference implementation. It is not production-ready as-is.
 
-### 5) Inspect public claims
+Production use requires explicit decisions for:
 
-```bash
-kubectl get landingzones.platform.pettertech.com
-kubectl get networks.platform.pettertech.com
-kubectl get storages.platform.pettertech.com
-```
+- authentication and identity model
+- provider config lifecycle
+- subscription vending
+- management group placement
+- Azure Policy
+- RBAC
+- multi-tenancy
+- GitOps
+- observability
+- secret management
+- testing and validation
+- naming and tagging standards
+- IPAM integration and network governance
 
-### 6) Inspect public composites
+## Roadmap
 
-```bash
-kubectl get xlandingzones.platform.pettertech.com
-kubectl get xnetworks.platform.pettertech.com
-kubectl get xstorages.platform.pettertech.com
-```
+1. Validate public API shapes.
+2. Implement minimal Azure managed resources.
+3. Implement landing zone subscription vending.
+4. Implement landing-zone-specific ProviderConfig lifecycle.
+5. Implement Azure Network using native IPAM.
+6. Add hub-connected corp network composition.
+7. Add online or isolated network composition.
+8. Add Storage implementation enhancements.
+9. Add tests and validation.
+10. Add contributor examples for additional platform products.
 
-### 7) Inspect internal Azure XRs (platform-owned layer)
+## More docs
 
-```bash
-kubectl get xazurelandingzones.azure.platform.pettertech.com
-kubectl get xazurevirtualnetworks.azure.platform.pettertech.com
-kubectl get xazurestorageaccounts.azure.platform.pettertech.com
-```
-
-### 8) Inspect resulting Azure managed resources
-
-```bash
-kubectl get virtualnetworks.virtualnetwork.network.azure.m.upbound.io
-kubectl get subnets.subnet.network.azure.m.upbound.io
-kubectl get securitygroups.network.azure.m.upbound.io
-kubectl get accounts.storage.azure.m.upbound.io
-kubectl get privateendpoints.network.azure.m.upbound.io
-```
-
-### 9) Clean up demo claims
-
-```bash
-kubectl delete -f examples/claims/05-storage.yaml
-kubectl delete -f examples/claims/02-network-corp.yaml
-kubectl delete -f examples/claims/01-landing-zone-corp.yaml
-```
-
-This repository is intentionally educational. Where exact Upjet Azure resource field mappings still need validation, comments and TODOs are explicit rather than implying production completeness.
+- docs/architecture.md
+- docs/api-design.md
+- docs/product-model.md
+- docs/bootstrap-assumptions.md
+- docs/project-goals.md
+- docs/non-goals.md
+- CONTRIBUTING.md

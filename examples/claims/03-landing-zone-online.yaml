@@ -1,15 +1,15 @@
 # Developer claim (LandingZone) backed by public composite kind XLandingZone.
-apiVersion: platform.pettertech.com/v1alpha1
+apiVersion: platform.example.org/v1alpha1
 kind: LandingZone
 metadata:
-  name: storefront-prod
+  name: orders-prod
 spec:
-  application: storefront
+  application: orders
   environment: prod
   type: online
   owner:
-    team: storefront
-    contact: storefront@pettertech.com
+    team: orders
+    contact: orders@example.com
   tags:
-    lifecycle: demo
-    owner: storefront
+    lifecycle: prod
+    owner: orders

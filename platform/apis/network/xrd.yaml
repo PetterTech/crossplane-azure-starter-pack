@@ -1,9 +1,9 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xnetworks.platform.pettertech.com
+  name: xnetworks.platform.example.org
 spec:
-  group: platform.pettertech.com
+  group: platform.example.org
   names:
     kind: XNetwork
     plural: xnetworks

@@ -5,21 +5,21 @@ metadata:
 
 data:
   azure:
-    tenantId: 00000000-0000-0000-0000-000000000000
-    defaultRegion: swedencentral
+    tenantId: <tenant-id>
+    defaultRegion: <default-location>
     managementGroups:
-      landingZones: TODO-landing-zones-management-group-id
-      corp: TODO-corp-management-group-id
-      online: TODO-online-management-group-id
-    billingScope: TODO-billing-scope
-    namingPrefix: demo
+      landingZones: <management-group-id>
+      corp: <corp-management-group-id>
+      online: <online-management-group-id>
+    billingScope: <billing-scope>
+    namingPrefix: <naming-prefix>
   networking:
     swedencentral:
-      hubId: TODO-hub-id
-      azureFirewallIp: TODO-azure-firewall-ip
+      hubId: <vwan-hub-id>
+      azureFirewallIp: <azure-firewall-ip>
       ipam:
-        ipAddressPool: TODO-ip-address-pool-id
+        ipAddressPool: <ip-address-pool-id>
   tags:
     managed-by: crossplane
     platform: starter-pack
-# TODO: Replace all placeholder values with real platform bootstrap inputs.
+# Example only: replace placeholder values with your platform bootstrap inputs.

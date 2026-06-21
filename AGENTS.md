@@ -6,7 +6,7 @@ This repository is a Crossplane Azure starter pack for demonstrating how a platf
 
 The primary goal is to show clean, cloud-agnostic, developer-facing APIs backed by Crossplane compositions and Azure implementation details.
 
-This is a proof-of-concept and demo repository. Prefer clarity, readability, and educational value over production completeness.
+This is a learning-focused starter pack and reference implementation. Prefer clarity, readability, and educational value over production completeness.
 
 ## Core design principles
 
@@ -52,13 +52,13 @@ Crossplane terminology in this repo:
 
 Use public APIs such as:
 
-* `platform.pettertech.com/v1alpha1`
+* `platform.example.org/v1alpha1`
 * Claim kinds: `LandingZone`, `Network`, `Storage`
 * Composite kinds: `XLandingZone`, `XNetwork`, `XStorage`
 
 Azure-specific implementation details belong in internal APIs such as:
 
-* `azure.platform.pettertech.com/v1alpha1`
+* `azure.platform.example.org/v1alpha1`
 * `XAzureLandingZone`
 * `XAzureVirtualNetwork`
 * `XAzureStorageAccount`
@@ -117,7 +117,7 @@ The developer should not need Azure knowledge to create platform products.
 For example, a developer should be able to create a landing zone with:
 
 ```yaml
-apiVersion: platform.pettertech.com/v1alpha1
+apiVersion: platform.example.org/v1alpha1
 kind: LandingZone
 metadata:
   name: payments-dev
@@ -132,7 +132,7 @@ spec:
 And a network with:
 
 ```yaml
-apiVersion: platform.pettertech.com/v1alpha1
+apiVersion: platform.example.org/v1alpha1
 kind: Network
 metadata:
   name: payments
@@ -220,7 +220,7 @@ The user-facing `Network` composition may read the referenced landing zone and e
 ```yaml
 compositionSelector:
   matchLabels:
-    platform.pettertech.com/network-profile: corp
+    platform.example.org/network-profile: corp
 ```
 
 ### Keep products small and composable
@@ -363,9 +363,9 @@ Do not use Azure Service Operator in this repo unless explicitly requested.
 
 Do not use Terraform provider as the primary implementation path.
 
-### Demo scope
+### Starter-pack walkthrough scope
 
-This repository should be demoable with:
+This repository should be easy to run with:
 
 ```bash
 kubectl apply -f examples/claims/01-landing-zone-corp.yaml
@@ -373,7 +373,7 @@ kubectl apply -f examples/claims/02-network-corp.yaml
 kubectl apply -f examples/claims/05-storage.yaml
 ```
 
-The demo should show:
+The walkthrough should show:
 
 * the clean developer claim
 * the generated public platform composite XR
@@ -408,7 +408,7 @@ When adding a new product, include:
 * composition
 * example claim
 * short explanation in docs
-* notes on what is demo-only
+* notes on what is starter-scope-only
 * notes on what would need hardening for production
 
 ### Style
@@ -419,7 +419,7 @@ Prefer explicit naming over clever abstraction.
 
 Use comments where they help explain the platform pattern.
 
-Avoid pretending demo placeholders are production-ready. Mark uncertain or simplified areas with clear TODO comments.
+Avoid pretending starter-pack placeholders are production-ready. Mark uncertain or simplified areas with clear TODO comments.
 
 When unsure, optimize for teaching the platform pattern.
 

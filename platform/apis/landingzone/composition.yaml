@@ -4,12 +4,12 @@ metadata:
   name: landingzone
 spec:
   compositeTypeRef:
-    apiVersion: platform.pettertech.com/v1alpha1
+    apiVersion: platform.example.org/v1alpha1
     kind: XLandingZone
   resources:
     - name: azure-landing-zone
       base:
-        apiVersion: azure.platform.pettertech.com/v1alpha1
+        apiVersion: azure.platform.example.org/v1alpha1
         kind: XAzureLandingZone
         spec:
           # LandingZone establishes scope and defaults used by child products.

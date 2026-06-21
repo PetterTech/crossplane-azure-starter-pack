@@ -1,9 +1,9 @@
 apiVersion: apiextensions.crossplane.io/v1
 kind: CompositeResourceDefinition
 metadata:
-  name: xlandingzones.platform.pettertech.com
+  name: xlandingzones.platform.example.org
 spec:
-  group: platform.pettertech.com
+  group: platform.example.org
   names:
     kind: XLandingZone
     plural: xlandingzones

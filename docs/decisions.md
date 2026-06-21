@@ -21,5 +21,5 @@
 
 1. Exact Upjet Azure managed resource schemas still need validation.
 2. Landing zone subscription vending, identity, and role assignment remain placeholder-only.
-3. Storage implementation is intentionally minimal for demo scope and still needs production hardening.
+3. Storage implementation is intentionally minimal for starter-pack scope and still needs production hardening.
 4. Azure native IPAM field mapping in Upjet for virtual network/subnet address assignment still needs final validation.

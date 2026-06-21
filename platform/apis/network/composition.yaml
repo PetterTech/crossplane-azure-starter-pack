@@ -4,7 +4,7 @@ metadata:
   name: network
 spec:
   compositeTypeRef:
-    apiVersion: platform.pettertech.com/v1alpha1
+    apiVersion: platform.example.org/v1alpha1
     kind: XNetwork
   mode: Pipeline
   pipeline:
@@ -38,17 +38,17 @@ spec:
             kind: ExtraResources
             requirements:
               landingzone:
-                apiVersion: platform.pettertech.com/v1alpha1
+                apiVersion: platform.example.org/v1alpha1
                 kind: LandingZone
                 matchName: {{ $xr.spec.landingZoneRef.name }}
             ---
-            apiVersion: platform.pettertech.com/v1alpha1
+            apiVersion: platform.example.org/v1alpha1
             kind: XNetwork
             status:
               # TODO: Keep this explicit until the in-cluster ExtraResources lookup is validated.
               networkProfile: {{ $networkProfile }}
             ---
-            apiVersion: azure.platform.pettertech.com/v1alpha1
+            apiVersion: azure.platform.example.org/v1alpha1
             kind: XAzureVirtualNetwork
             metadata:
               name: {{ $xr.metadata.name }}
@@ -64,4 +64,4 @@ spec:
               # Internal compositions own corp vs online implementation details.
               compositionSelector:
                 matchLabels:
-                  platform.pettertech.com/network-profile: {{ $networkProfile }}
+                  platform.example.org/network-profile: {{ $networkProfile }}

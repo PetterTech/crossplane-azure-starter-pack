@@ -4,7 +4,7 @@ metadata:
   name: xazurestorageaccount
 spec:
   compositeTypeRef:
-    apiVersion: azure.platform.pettertech.com/v1alpha1
+    apiVersion: azure.platform.example.org/v1alpha1
     kind: XAzureStorageAccount
   environment:
     environmentConfigs:
@@ -18,7 +18,7 @@ spec:
         kind: Account
         metadata:
           labels:
-            platform.pettertech.com/resource-role: storage-account
+            platform.example.org/resource-role: storage-account
         spec:
           forProvider:
             location: swedencentral
@@ -98,14 +98,14 @@ spec:
           forProvider:
             location: swedencentral
             resourceGroupName: rg-placeholder
-            subnetId: /subscriptions/TODO-subscription-id/resourceGroups/TODO-network-rg/providers/Microsoft.Network/virtualNetworks/TODO-vnet/subnets/TODO-private-endpoints
+            subnetId: /subscriptions/<connectivity-subscription-id>/resourceGroups/<network-resource-group>/providers/Microsoft.Network/virtualNetworks/<vnet-name>/subnets/<private-endpoints-subnet>
             privateServiceConnection:
               - name: storage-blob-psc
                 isManualConnection: false
                 privateConnectionResourceIdSelector:
                   matchControllerRef: true
                   matchLabels:
-                    platform.pettertech.com/resource-role: storage-account
+                    platform.example.org/resource-role: storage-account
                 subresourceNames:
                   - blob
             tags: {}
@@ -155,14 +155,14 @@ spec:
           forProvider:
             location: swedencentral
             resourceGroupName: rg-placeholder
-            subnetId: /subscriptions/TODO-subscription-id/resourceGroups/TODO-network-rg/providers/Microsoft.Network/virtualNetworks/TODO-vnet/subnets/TODO-private-endpoints
+            subnetId: /subscriptions/<connectivity-subscription-id>/resourceGroups/<network-resource-group>/providers/Microsoft.Network/virtualNetworks/<vnet-name>/subnets/<private-endpoints-subnet>
             privateServiceConnection:
               - name: storage-file-psc
                 isManualConnection: false
                 privateConnectionResourceIdSelector:
                   matchControllerRef: true
                   matchLabels:
-                    platform.pettertech.com/resource-role: storage-account
+                    platform.example.org/resource-role: storage-account
                 subresourceNames:
                   - file
             tags: {}
@@ -206,12 +206,13 @@ spec:
             fromFieldPath: Optional
 
 # -----------------------------------------------------------------------------
-# XAzureStorageAccount internal Azure implementation (demo scope)
+# XAzureStorageAccount internal Azure implementation (starter-pack scope)
 # -----------------------------------------------------------------------------
 # Includes the minimum managed resources for a storage account and private
 # endpoints (blob and file) using the Upjet m-provider.
 # Demonstrates that the same public->internal layering works for managed
 # resource products beyond networking.
+# Production hardening areas are intentionally explicit for contributors.
 # TODO: Add private DNS zone group wiring for name resolution.
 # TODO: Source private endpoint subnet IDs from hardened platform config.
 # TODO: Add diagnostics, lifecycle rules, and advanced security hardening.

@@ -66,6 +66,9 @@ spec:
                 networkProfile:
                   type: string
                   description: Derived platform network profile for downstream products.
+                providerConfigName:
+                  type: string
+                  description: ProviderConfig name conventionally matching the LandingZone name.
       additionalPrinterColumns:
         - name: Type
           type: string

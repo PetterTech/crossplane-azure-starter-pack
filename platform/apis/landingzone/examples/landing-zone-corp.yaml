@@ -1,14 +1,9 @@
 apiVersion: platform.example.org/v1alpha1
 kind: LandingZone
 metadata:
-  name: payments-dev
+  name: app-dev
 spec:
-  application: payments
+  application: app
   environment: dev
-  type: corp
   owner:
-    team: payments
-    contact: payments@example.com
-  tags:
-    cost-center: cc-1001
-    lifecycle: dev
+    team: app-team

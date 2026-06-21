@@ -9,6 +9,3 @@ spec:
   owner:
     team: orders
     contact: orders@example.com
-  tags:
-    cost-center: cc-2200
-    lifecycle: prod

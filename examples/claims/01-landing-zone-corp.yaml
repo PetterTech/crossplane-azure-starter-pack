@@ -1,15 +1,9 @@
-# Developer claim (LandingZone) backed by public composite kind XLandingZone.
 apiVersion: platform.example.org/v1alpha1
 kind: LandingZone
 metadata:
-  name: payments-dev
+  name: app-dev
 spec:
-  application: payments
+  application: app
   environment: dev
-  type: corp
   owner:
-    team: payments
-    contact: payments@example.com
-  tags:
-    lifecycle: dev
-    owner: payments
+    team: app-team

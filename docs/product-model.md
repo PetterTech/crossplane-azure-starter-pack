@@ -31,7 +31,6 @@ Developer inputs:
 
 - `landingZoneRef.name`
 - `size`
-- optional `tags`
 
 The public API intentionally does not ask for CIDR blocks or address space.
 The platform derives profile-specific behavior (corp vs online) from the referenced LandingZone.
@@ -45,7 +44,6 @@ Developer inputs:
 - `landingZoneRef.name`
 - `geo-redundant`
 - `access`
-- optional `tags`
 
 This product demonstrates the same layered pattern for managed resources, not only networking.
 

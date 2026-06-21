@@ -424,3 +424,9 @@ Avoid pretending starter-pack placeholders are production-ready. Mark uncertain 
 When unsure, optimize for teaching the platform pattern.
 
 Every enum should have a default value to minimize required developer input.
+
+## Code review
+
+### Pull request reviews
+
+We favor atomic and conventional commits, feel free to shame the author if they break the pattern.

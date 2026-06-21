@@ -66,8 +66,10 @@ spec:
               # ProviderConfig name intentionally matches the LandingZone name.
               providerConfigName: {{ $xr.spec.landingZoneRef.name }}
               size: {{ $xr.spec.size }}
+              # Internal-only selector input derived from LandingZone type/profile.
               networkProfile: {{ $networkProfile }}
               # Internal Azure compositions own corp vs online implementation details.
+              # Public Network claims never set this selector directly.
               compositionSelector:
                 matchLabels:
                   platform.example.org/network-profile: {{ $networkProfile }}

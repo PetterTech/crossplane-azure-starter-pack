@@ -22,14 +22,19 @@ kubectl apply -f examples/platform-admin/provider-config.yaml
 
 ```bash
 kubectl apply -f platform/apis/landingzone/xrd.yaml
+kubectl apply -f platform/apis/network/xrd.yaml
 kubectl apply -f platform/apis/azure/xazurelanding-zone/xrd.yaml
+kubectl apply -f platform/apis/azure/xazurevirtual-network/xrd.yaml
 ```
 
 ## 3) Apply compositions
 
 ```bash
 kubectl apply -f platform/apis/landingzone/composition.yaml
+kubectl apply -f platform/apis/network/composition.yaml
 kubectl apply -f platform/apis/azure/xazurelanding-zone/composition.yaml
+kubectl apply -f platform/apis/azure/xazurevirtual-network/composition-corp.yaml
+kubectl apply -f platform/apis/azure/xazurevirtual-network/composition-online.yaml
 ```
 
 ## 4) Apply developer claims in order
@@ -71,8 +76,44 @@ Say:
 - `XAzureLandingZone` is the internal Azure implementation contract.
 - The chain is intentionally valid even while Azure subscription vending remains TODO in the internal composition.
 
-## 8) Clean up claim
+## 8) Apply corp network claim and inspect selection
+
+```bash
+kubectl apply -f examples/claims/02-network-corp.yaml
+kubectl get xnetworks.platform.example.org -o yaml
+kubectl get xazurevirtualnetworks.azure.platform.example.org -o yaml
+kubectl get composition xazurevirtualnetwork-corp -o yaml
+```
+
+Check:
+
+- `XNetwork.status.networkProfile` is `corp`.
+- `XAzureVirtualNetwork.spec.networkProfile` is `corp`.
+- `XAzureVirtualNetwork.spec.compositionSelector.matchLabels.platform.example.org/network-profile` is `corp`.
+- Internal composition `xazurevirtualnetwork-corp` has label `platform.example.org/network-profile: corp`.
+
+## 9) Apply online landing zone + network and inspect selection
+
+```bash
+kubectl apply -f examples/claims/03-landing-zone-online.yaml
+kubectl apply -f examples/claims/04-network-online.yaml
+kubectl get xnetworks.platform.example.org -o yaml
+kubectl get xazurevirtualnetworks.azure.platform.example.org -o yaml
+kubectl get composition xazurevirtualnetwork-online -o yaml
+```
+
+Check:
+
+- `XNetwork.status.networkProfile` is `online`.
+- `XAzureVirtualNetwork.spec.networkProfile` is `online`.
+- `XAzureVirtualNetwork.spec.compositionSelector.matchLabels.platform.example.org/network-profile` is `online`.
+- Internal composition `xazurevirtualnetwork-online` has label `platform.example.org/network-profile: online`.
+
+## 10) Clean up claims
 
 ```bash
 kubectl delete -f examples/claims/01-landing-zone-corp.yaml
+kubectl delete -f examples/claims/02-network-corp.yaml
+kubectl delete -f examples/claims/03-landing-zone-online.yaml
+kubectl delete -f examples/claims/04-network-online.yaml
 ```

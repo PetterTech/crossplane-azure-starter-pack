@@ -42,6 +42,11 @@ spec:
                   type: string
                 networkProfile:
                   type: string
+                  description: Internal profile used to select corp or online Azure virtual network composition.
+                  default: corp
+                  enum:
+                    - corp
+                    - online
                 naming:
                   type: object
                   description: Naming inputs used to derive Azure network resource names.
@@ -65,7 +70,7 @@ spec:
                     type: string
                 compositionSelector:
                   type: object
-                  description: Optional composition selector used to choose corp or online Azure compositions.
+                  description: Optional composition selector matched against composition labels for corp or online profiles.
                   properties:
                     matchLabels:
                       type: object

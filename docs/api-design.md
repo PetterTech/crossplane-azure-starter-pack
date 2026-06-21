@@ -28,6 +28,11 @@ They hold Azure-specific implementation details owned by platform engineers.
 - Public Storage remains cloud-agnostic.
 - ProviderConfig naming convention matches the LandingZone name.
 - Internal XAzureVirtualNetwork compositions are selected by a derived networkProfile label.
+- LandingZone `type: corp` maps to internal `networkProfile: corp`.
+- LandingZone `type: online` maps to internal `networkProfile: online`.
+- XAzureVirtualNetwork uses `compositionSelector.matchLabels.platform.example.org/network-profile` to select:
+	- `xazurevirtualnetwork-corp` for `corp`
+	- `xazurevirtualnetwork-online` for `online`
 - Internal Azure compositions carry `corp` vs `online` behavior.
 
 This repository currently implements the Azure branch for these public APIs. Additional cloud branches can be added without changing the public claim shapes.

@@ -34,10 +34,26 @@ Example flow in this repository:
 Network claim
 	-> XNetwork
 	-> XAzureVirtualNetwork
+	-> XAzureVirtualNetwork composition selected by networkProfile label
 	-> Azure VNet resources
 ```
 
 Network is cloud-agnostic. This starter pack currently provides the Azure implementation.
+
+## Network composition selection
+
+Selection is driven by an internal `networkProfile`, not by developer input.
+
+Behavior:
+
+- LandingZone `spec.type: corp` resolves to `networkProfile: corp`.
+- LandingZone `spec.type: online` resolves to `networkProfile: online`.
+- Public `XNetwork` composition emits `XAzureVirtualNetwork.spec.networkProfile` and `spec.compositionSelector.matchLabels.platform.example.org/network-profile` with that derived value.
+- Internal Azure compositions use labels to match:
+  - `platform.example.org/network-profile: corp` -> `xazurevirtualnetwork-corp`
+  - `platform.example.org/network-profile: online` -> `xazurevirtualnetwork-online`
+
+This keeps the public `Network` claim simple (`landingZoneRef` + `size`) while Azure implementation details stay internal.
 
 ## Composition approach
 

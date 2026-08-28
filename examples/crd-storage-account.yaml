@@ -1,0 +1,15 @@
+apiVersion: storage.azure.m.upbound.io/v1beta1
+kind: Account
+metadata:
+  name: pettertechdemocrossplan
+  namespace: crossplane-system
+spec:
+  forProvider:
+    resourceGroupName: rg-javazone
+    location: swedencentral
+    accountTier: Standard
+    accountReplicationType: LRS
+  providerConfigRef:
+    kind: ClusterProviderConfig
+    name: default
+

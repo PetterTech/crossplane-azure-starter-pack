@@ -1,0 +1,11 @@
+apiVersion: platform.example.org/v1alpha1
+kind: StorageAccount
+metadata:
+  name: storage-account-xr
+  namespace: crossplane-system
+spec:
+  parameters:
+    name: pettertechdemoxr
+    geoRedundant: false
+    tags:
+      environment: demo

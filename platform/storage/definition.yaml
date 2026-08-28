@@ -1,0 +1,57 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: storageaccounts.platform.example.org
+spec:
+  group: platform.example.org
+  names:
+    kind: StorageAccount
+    plural: storageaccounts
+  defaultCompositionRef:
+    name: storageaccounts.azure.storage.platform.example.org
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              parameters:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    description: Storage name.
+                    minLength: 3
+                    maxLength: 24
+                    pattern: '^[a-z0-9]+$'
+                  geoRedundant:
+                    type: boolean
+                    description: Whether the backing implementation should use geo-redundant replication.
+                  tags:
+                    type: object
+                    description: Arbitrary tags to apply to the backing storage account.
+                    additionalProperties:
+                      type: string
+                required:
+                - name
+                - geoRedundant
+            required:
+            - parameters
+          status:
+            type: object
+            properties:
+              accountName:
+                type: string
+    additionalPrinterColumns:
+    - name: Name
+      type: string
+      jsonPath: .spec.parameters.name
+    - name: Geo
+      type: boolean
+      jsonPath: .spec.parameters.geoRedundant
+---

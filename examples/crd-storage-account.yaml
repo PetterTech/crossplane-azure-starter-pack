@@ -7,8 +7,30 @@ spec:
   forProvider:
     resourceGroupName: rg-javazone
     location: swedencentral
+    accountKind: StorageV2
     accountTier: Standard
-    accountReplicationType: LRS
+    accountReplicationType: ZRS
+    isHnsEnabled: true
+    largeFileShareEnabled: true
+    localUserEnabled: false
+    minTlsVersion: TLS1_2
+    networkRules:
+      bypass:
+      - AzureServices
+      - Logging
+      defaultAction: Deny
+      ipRules:
+      - 1.1.1.0/24
+    nfsv3Enabled: true
+    publicNetworkAccessEnabled: false
+    sftpEnabled: true
+    sharedAccessKeyEnabled: true
+    tags:
+      project: javazone
+      pre-created: 'true'
+      environment: demo
+      managed-by: crossplane
+      workload: platform-storage
   providerConfigRef:
     kind: ClusterProviderConfig
     name: default

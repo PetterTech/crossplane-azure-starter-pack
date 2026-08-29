@@ -3,7 +3,7 @@ kind: Provider
 metadata:
   name: provider-family-azure
 spec:
-  package: xpkg.upbound.io/upbound/provider-family-azure:v2.6.0
+  package: xpkg.upbound.io/upbound/provider-family-azure:v2.7.1
   runtimeConfigRef:
     name: provider-azure
 ---
@@ -12,7 +12,25 @@ kind: Provider
 metadata:
   name: provider-azure-storage
 spec:
-  package: xpkg.upbound.io/upbound/provider-azure-storage:v2.6.0
+  package: xpkg.upbound.io/upbound/provider-azure-storage:v2.7.1
+  runtimeConfigRef:
+    name: provider-azure
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-network
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-network:v2.7.1
+  runtimeConfigRef:
+    name: provider-azure
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-containerapp
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-containerapp:v2.7.1
   runtimeConfigRef:
     name: provider-azure
 ---

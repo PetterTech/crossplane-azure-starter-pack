@@ -24,9 +24,29 @@ spec:
               accountKind: StorageV2
               accountTier: Standard
               accountReplicationType: ZRS
+              isHnsEnabled: true
+              largeFileShareEnabled: true
+              localUserEnabled: false
+              minTlsVersion: TLS1_2
               location: swedencentral
               resourceGroupName: rg-javazone
-              tags: {}
+              networkRules:
+                bypass:
+                - AzureServices
+                - Logging
+                defaultAction: Deny
+                ipRules:
+                - 1.1.1.0/24
+              nfsv3Enabled: true
+              publicNetworkAccessEnabled: false
+              sftpEnabled: true
+              sharedAccessKeyEnabled: true
+              tags:
+                project: javazone
+                pre-created: "true"
+                environment: demo
+                managed-by: crossplane
+                workload: platform-storage
             providerConfigRef:
               kind: ClusterProviderConfig
               name: default
@@ -39,6 +59,7 @@ spec:
           toFieldPath: spec.forProvider.tags
           policy:
             fromFieldPath: Optional
+            toFieldPath: MergeObjectsAppendArrays
         - type: FromCompositeFieldPath
           fromFieldPath: spec.parameters.geoRedundant
           toFieldPath: spec.forProvider.accountReplicationType
@@ -53,4 +74,47 @@ spec:
         - type: ToCompositeFieldPath
           fromFieldPath: metadata.annotations["crossplane.io/external-name"]
           toFieldPath: status.accountName
----
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.id
+          toFieldPath: status.resourceId
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.primaryBlobEndpoint
+          toFieldPath: status.endpoints.blob
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.primaryFileEndpoint
+          toFieldPath: status.endpoints.file
+  - step: go-templating
+    functionRef:
+      name: function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      kind: GoTemplate
+      source: Inline
+      inline:
+        template: |
+          {{- $xr := getCompositeResource . -}}
+          {{- $resourceId := get $xr.status "resourceId" -}}
+          {{- if and (eq $xr.spec.parameters.networking "private") $resourceId }}
+          apiVersion: network.azure.m.upbound.io/v1beta1
+          kind: PrivateEndpoint
+          metadata:
+            annotations:
+              {{ setResourceNameAnnotation "private-endpoint" }}
+          spec:
+            forProvider:
+              location: swedencentral
+              resourceGroupName: rg-javazone
+              subnetId: /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-javazone/providers/Microsoft.Network/virtualNetworks/vnet-javazone/subnets/default
+              privateServiceConnection:
+                name: storage-account
+                isManualConnection: false
+                privateConnectionResourceId: {{ $resourceId }}
+                subresourceNames:
+                - blob
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: default
+          {{- end }}
+  - step: auto-ready
+    functionRef:
+      name: function-auto-ready

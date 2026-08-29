@@ -6,6 +6,7 @@ metadata:
 spec:
   parameters:
     name: pettertechdemoxr
-    geoRedundant: false
+    geoRedundant: true
+    networking: private
     tags:
       environment: demo

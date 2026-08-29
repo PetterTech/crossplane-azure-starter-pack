@@ -32,6 +32,13 @@ spec:
                   geoRedundant:
                     type: boolean
                     description: Whether the backing implementation should use geo-redundant replication.
+                  networking:
+                    type: string
+                    description: Whether the storage account uses a private endpoint or public access.
+                    enum:
+                    - private
+                    - public
+                    default: private
                   tags:
                     type: object
                     description: Arbitrary tags to apply to the backing storage account.
@@ -47,6 +54,15 @@ spec:
             properties:
               accountName:
                 type: string
+              resourceId:
+                type: string
+              endpoints:
+                type: object
+                properties:
+                  blob:
+                    type: string
+                  file:
+                    type: string
     additionalPrinterColumns:
     - name: Name
       type: string

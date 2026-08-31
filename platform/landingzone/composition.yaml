@@ -1,0 +1,184 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: landingzones.azure.platform.example.org
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: LandingZone
+  mode: Pipeline
+  pipeline:
+  - step: patch-and-transform
+    functionRef:
+      name: function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+      - name: subscription
+        base:
+          apiVersion: platform.example.org/v1alpha1
+          kind: Subscription
+          spec:
+            parameters:
+              workload: Production
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: spec.parameters.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.tags
+          toFieldPath: spec.parameters.tags
+          policy:
+            fromFieldPath: Optional
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: metadata.annotations["platform.example.org/resource-group-name"]
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "rg-%s"
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: metadata.annotations["platform.example.org/vnet-name"]
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "vnet-%s"
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: metadata.annotations["platform.example.org/key-vault-name"]
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "%skv"
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.subscriptionId
+          toFieldPath: status.subscriptionId
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.providerConfigName
+          toFieldPath: status.providerConfigName
+        - type: ToCompositeFieldPath
+          fromFieldPath: metadata.annotations["platform.example.org/resource-group-name"]
+          toFieldPath: status.resourceGroupName
+        - type: ToCompositeFieldPath
+          fromFieldPath: metadata.annotations["platform.example.org/vnet-name"]
+          toFieldPath: status.vnetName
+        - type: ToCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: status.storageAccountName
+        - type: ToCompositeFieldPath
+          fromFieldPath: metadata.annotations["platform.example.org/key-vault-name"]
+          toFieldPath: status.keyVaultName
+      - name: resource-group
+        base:
+          apiVersion: azure.m.upbound.io/v1beta1
+          kind: ResourceGroup
+          spec:
+            forProvider:
+              location: swedencentral
+            providerConfigRef:
+              kind: ClusterProviderConfig
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: metadata.annotations["crossplane.io/external-name"]
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "rg-%s"
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.providerConfigName
+          toFieldPath: spec.providerConfigRef.name
+          policy:
+            fromFieldPath: Required
+      - name: virtual-network
+        base:
+          apiVersion: platform.example.org/v1alpha1
+          kind: VirtualNetwork
+          spec:
+            parameters: {}
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: spec.parameters.name
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "vnet-%s"
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.resourceGroupName
+          toFieldPath: spec.parameters.resourceGroupName
+          policy:
+            fromFieldPath: Required
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.providerConfigName
+          toFieldPath: spec.parameters.providerConfigName
+          policy:
+            fromFieldPath: Required
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.subnetId
+          toFieldPath: status.subnetId
+      - name: storage-account
+        base:
+          apiVersion: platform.example.org/v1alpha1
+          kind: StorageAccount
+          spec:
+            parameters:
+              geoRedundant: false
+              networking: private
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: spec.parameters.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.resourceGroupName
+          toFieldPath: spec.parameters.resourceGroupName
+          policy:
+            fromFieldPath: Required
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.providerConfigName
+          toFieldPath: spec.parameters.providerConfigName
+          policy:
+            fromFieldPath: Required
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.subnetId
+          toFieldPath: spec.parameters.subnetId
+          policy:
+            fromFieldPath: Required
+      - name: key-vault
+        base:
+          apiVersion: platform.example.org/v1alpha1
+          kind: KeyVault
+          spec:
+            parameters:
+              networking: private
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: spec.parameters.name
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "%skv"
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.resourceGroupName
+          toFieldPath: spec.parameters.resourceGroupName
+          policy:
+            fromFieldPath: Required
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.providerConfigName
+          toFieldPath: spec.parameters.providerConfigName
+          policy:
+            fromFieldPath: Required
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.subnetId
+          toFieldPath: spec.parameters.subnetId
+          policy:
+            fromFieldPath: Required

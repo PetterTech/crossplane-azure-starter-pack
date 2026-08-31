@@ -1,0 +1,10 @@
+apiVersion: platform.example.org/v1alpha1
+kind: VirtualNetwork
+metadata:
+  name: virtual-network-xr
+  namespace: crossplane-system
+spec:
+  parameters:
+    name: vnet-javazone-spoke
+    tags:
+      environment: demo

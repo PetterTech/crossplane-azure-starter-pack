@@ -1,0 +1,10 @@
+apiVersion: platform.example.org/v1alpha1
+kind: LandingZone
+metadata:
+  name: landing-zone-xr
+  namespace: crossplane-system
+spec:
+  parameters:
+    name: javazonelz
+    tags:
+      environment: demo

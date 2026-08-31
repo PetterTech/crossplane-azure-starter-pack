@@ -1,0 +1,11 @@
+apiVersion: platform.example.org/v1alpha1
+kind: KeyVault
+metadata:
+  name: key-vault-xr
+  namespace: crossplane-system
+spec:
+  parameters:
+    name: pettertechdemokv
+    networking: private
+    tags:
+      environment: demo

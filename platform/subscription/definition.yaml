@@ -1,0 +1,63 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: subscriptions.platform.example.org
+spec:
+  group: platform.example.org
+  names:
+    kind: Subscription
+    plural: subscriptions
+  defaultCompositionRef:
+    name: subscriptions.azure.management.platform.example.org
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              parameters:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    description: Display name for the subscription.
+                    minLength: 1
+                    maxLength: 63
+                  workload:
+                    type: string
+                    description: The workload type of the subscription.
+                    enum:
+                    - Production
+                    - DevTest
+                    default: Production
+                  tags:
+                    type: object
+                    description: Arbitrary tags to apply to the subscription.
+                    additionalProperties:
+                      type: string
+                required:
+                - name
+            required:
+            - parameters
+          status:
+            type: object
+            properties:
+              subscriptionId:
+                type: string
+              resourceId:
+                type: string
+              providerConfigName:
+                type: string
+    additionalPrinterColumns:
+    - name: Name
+      type: string
+      jsonPath: .spec.parameters.name
+    - name: SubscriptionId
+      type: string
+      jsonPath: .status.subscriptionId
+---

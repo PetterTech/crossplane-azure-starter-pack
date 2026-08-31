@@ -1,0 +1,198 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: subscriptions.azure.management.platform.example.org
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: Subscription
+  mode: Pipeline
+  pipeline:
+  - step: patch-and-transform
+    functionRef:
+      name: function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+      - name: subscription
+        base:
+          apiVersion: azure.m.upbound.io/v1beta1
+          kind: Subscription
+          spec:
+            forProvider:
+              billingScopeId: /providers/Microsoft.Billing/billingAccounts/5001c7cc-42ac-520c-5682-bd4ebc6fb58f:d3dd64a3-a356-47b7-8f0d-4f2b697bd3d2_2019-05-31/billingProfiles/R2QH-7BZS-BG7-PGB/invoiceSections/IQI3-DEPG-PJA-PGB
+              workload: Production
+              tags: {}
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: default
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: spec.forProvider.subscriptionName
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: metadata.annotations["crossplane.io/external-name"]
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.workload
+          toFieldPath: spec.forProvider.workload
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.tags
+          toFieldPath: spec.forProvider.tags
+          policy:
+            fromFieldPath: Optional
+            toFieldPath: MergeObjectsAppendArrays
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.id
+          toFieldPath: status.resourceId
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.subscriptionId
+          toFieldPath: status.subscriptionId
+      - name: management-group-association
+        base:
+          apiVersion: management.azure.m.upbound.io/v1beta1
+          kind: ManagementGroupSubscriptionAssociation
+          spec:
+            forProvider:
+              managementGroupId: /providers/Microsoft.Management/managementGroups/6da022f2-f435-415c-b122-b1c65e4b2f6e
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: default
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.subscriptionId
+          toFieldPath: spec.forProvider.subscriptionId
+          policy:
+            fromFieldPath: Required
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "/subscriptions/%s"
+      - name: provider-config
+        base:
+          apiVersion: azure.m.upbound.io/v1beta1
+          kind: ClusterProviderConfig
+          spec:
+            credentials:
+              source: OIDCTokenFile
+            clientID: "421a2b18-9b30-444b-a485-75a3455cd7bb"
+            tenantID: "1abc0146-e4d2-4bf8-bc3c-455e9630f6e4"
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: metadata.name
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "%s-provider-config"
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.subscriptionId
+          toFieldPath: spec.subscriptionID
+          policy:
+            fromFieldPath: Required
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: status.providerConfigName
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "%s-provider-config"
+      - name: register-provider-network
+        base:
+          apiVersion: azure.m.upbound.io/v1beta1
+          kind: ResourceProviderRegistration
+          spec:
+            forProvider:
+              name: Microsoft.Network
+            providerConfigRef:
+              kind: ClusterProviderConfig
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.subscriptionId
+          toFieldPath: metadata.annotations["platform.example.org/gate"]
+          policy:
+            fromFieldPath: Required
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.providerConfigRef.name
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "%s-provider-config"
+      - name: register-provider-storage
+        base:
+          apiVersion: azure.m.upbound.io/v1beta1
+          kind: ResourceProviderRegistration
+          spec:
+            forProvider:
+              name: Microsoft.Storage
+            providerConfigRef:
+              kind: ClusterProviderConfig
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.subscriptionId
+          toFieldPath: metadata.annotations["platform.example.org/gate"]
+          policy:
+            fromFieldPath: Required
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.providerConfigRef.name
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "%s-provider-config"
+      - name: register-provider-keyvault
+        base:
+          apiVersion: azure.m.upbound.io/v1beta1
+          kind: ResourceProviderRegistration
+          spec:
+            forProvider:
+              name: Microsoft.KeyVault
+            providerConfigRef:
+              kind: ClusterProviderConfig
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.subscriptionId
+          toFieldPath: metadata.annotations["platform.example.org/gate"]
+          policy:
+            fromFieldPath: Required
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.providerConfigRef.name
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "%s-provider-config"
+      - name: register-provider-compute
+        base:
+          apiVersion: azure.m.upbound.io/v1beta1
+          kind: ResourceProviderRegistration
+          spec:
+            forProvider:
+              name: Microsoft.Compute
+            providerConfigRef:
+              kind: ClusterProviderConfig
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.subscriptionId
+          toFieldPath: metadata.annotations["platform.example.org/gate"]
+          policy:
+            fromFieldPath: Required
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.providerConfigRef.name
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "%s-provider-config"
+  - step: auto-ready
+    functionRef:
+      name: function-auto-ready

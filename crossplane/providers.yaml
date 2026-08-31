@@ -34,3 +34,21 @@ spec:
   runtimeConfigRef:
     name: provider-azure
 ---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-management
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-management:v2.7.1
+  runtimeConfigRef:
+    name: provider-azure
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-keyvault
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-keyvault:v2.7.1
+  runtimeConfigRef:
+    name: provider-azure
+---

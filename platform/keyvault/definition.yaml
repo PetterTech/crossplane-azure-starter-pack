@@ -1,0 +1,76 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: keyvaults.platform.example.org
+spec:
+  group: platform.example.org
+  names:
+    kind: KeyVault
+    plural: keyvaults
+  defaultCompositionRef:
+    name: keyvaults.azure.keyvault.platform.example.org
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              parameters:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    description: Key vault name.
+                    minLength: 3
+                    maxLength: 24
+                    pattern: '^[a-zA-Z0-9-]+$'
+                  networking:
+                    type: string
+                    description: Whether the key vault uses a private endpoint or public access.
+                    enum:
+                    - private
+                    - public
+                    default: private
+                  resourceGroupName:
+                    type: string
+                    description: The resource group to create the key vault in.
+                    default: rg-javazone
+                  providerConfigName:
+                    type: string
+                    description: The ClusterProviderConfig to use, for targeting a specific subscription.
+                    default: default
+                  subnetId:
+                    type: string
+                    description: The subnet to attach the private endpoint to, when networking is private.
+                    default: /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-javazone/providers/Microsoft.Network/virtualNetworks/vnet-javazone/subnets/default
+                  tags:
+                    type: object
+                    description: Arbitrary tags to apply to the key vault.
+                    additionalProperties:
+                      type: string
+                required:
+                - name
+            required:
+            - parameters
+          status:
+            type: object
+            properties:
+              vaultName:
+                type: string
+              resourceId:
+                type: string
+              vaultUri:
+                type: string
+    additionalPrinterColumns:
+    - name: Name
+      type: string
+      jsonPath: .spec.parameters.name
+    - name: Networking
+      type: string
+      jsonPath: .spec.parameters.networking
+---

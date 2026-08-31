@@ -39,6 +39,18 @@ spec:
                     - private
                     - public
                     default: private
+                  resourceGroupName:
+                    type: string
+                    description: The resource group to create the storage account in.
+                    default: rg-javazone
+                  providerConfigName:
+                    type: string
+                    description: The ClusterProviderConfig to use, for targeting a specific subscription.
+                    default: default
+                  subnetId:
+                    type: string
+                    description: The subnet to attach the private endpoint to, when networking is private.
+                    default: /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-javazone/providers/Microsoft.Network/virtualNetworks/vnet-javazone/subnets/default
                   tags:
                     type: object
                     description: Arbitrary tags to apply to the backing storage account.

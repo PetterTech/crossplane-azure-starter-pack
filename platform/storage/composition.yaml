@@ -55,6 +55,12 @@ spec:
           fromFieldPath: spec.parameters.name
           toFieldPath: metadata.annotations["crossplane.io/external-name"]
         - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.resourceGroupName
+          toFieldPath: spec.forProvider.resourceGroupName
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.providerConfigName
+          toFieldPath: spec.providerConfigRef.name
+        - type: FromCompositeFieldPath
           fromFieldPath: spec.parameters.tags
           toFieldPath: spec.forProvider.tags
           policy:
@@ -103,8 +109,8 @@ spec:
           spec:
             forProvider:
               location: swedencentral
-              resourceGroupName: rg-javazone
-              subnetId: /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-javazone/providers/Microsoft.Network/virtualNetworks/vnet-javazone/subnets/default
+              resourceGroupName: {{ $xr.spec.parameters.resourceGroupName }}
+              subnetId: {{ $xr.spec.parameters.subnetId }}
               privateServiceConnection:
                 name: storage-account
                 isManualConnection: false
@@ -113,7 +119,7 @@ spec:
                 - blob
             providerConfigRef:
               kind: ClusterProviderConfig
-              name: default
+              name: {{ $xr.spec.parameters.providerConfigName }}
           {{- end }}
   - step: auto-ready
     functionRef:

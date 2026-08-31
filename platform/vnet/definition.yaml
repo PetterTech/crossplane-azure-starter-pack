@@ -1,0 +1,90 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: virtualnetworks.platform.example.org
+spec:
+  group: platform.example.org
+  names:
+    kind: VirtualNetwork
+    plural: virtualnetworks
+  defaultCompositionRef:
+    name: virtualnetworks.azure.network.platform.example.org
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              parameters:
+                type: object
+                properties:
+                  name:
+                    type: string
+                    description: Virtual network name.
+                    minLength: 2
+                    maxLength: 64
+                  ipamPoolId:
+                    type: string
+                    description: Azure Network Manager IPAM pool ID to allocate the address space from.
+                    enum:
+                    - /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-hub/providers/Microsoft.Network/networkManagers/avnm-hub/ipamPools/pool-javazone
+                    default: /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-hub/providers/Microsoft.Network/networkManagers/avnm-hub/ipamPools/pool-javazone
+                  size:
+                    type: string
+                    description: Address space size to allocate from the IPAM pool. small=/25, medium=/24, large=/23.
+                    enum:
+                    - small
+                    - medium
+                    - large
+                    default: medium
+                  createSubnet:
+                    type: boolean
+                    description: Whether to create a single subnet that consumes the entire address space.
+                    default: true
+                  peerToHub:
+                    type: boolean
+                    description: Whether to connect this virtual network to the hub virtual hub.
+                    default: true
+                  resourceGroupName:
+                    type: string
+                    description: The resource group to create the virtual network in.
+                    default: rg-javazone
+                  providerConfigName:
+                    type: string
+                    description: The ClusterProviderConfig to use, for targeting a specific subscription.
+                    default: default
+                  tags:
+                    type: object
+                    description: Arbitrary tags to apply to the virtual network.
+                    additionalProperties:
+                      type: string
+                required:
+                - name
+            required:
+            - parameters
+          status:
+            type: object
+            properties:
+              vnetName:
+                type: string
+              resourceId:
+                type: string
+              subnetId:
+                type: string
+              addressSpace:
+                type: array
+                items:
+                  type: string
+    additionalPrinterColumns:
+    - name: Name
+      type: string
+      jsonPath: .spec.parameters.name
+    - name: AddressSpace
+      type: string
+      jsonPath: .status.addressSpace
+---

@@ -1,0 +1,121 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: virtualnetworks.azure.network.platform.example.org
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: VirtualNetwork
+  mode: Pipeline
+  pipeline:
+  - step: patch-and-transform
+    functionRef:
+      name: function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      resources:
+      - name: virtual-network
+        base:
+          apiVersion: network.azure.m.upbound.io/v1beta1
+          kind: VirtualNetwork
+          spec:
+            forProvider:
+              location: swedencentral
+              resourceGroupName: rg-javazone
+              tags: {}
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: default
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: metadata.annotations["crossplane.io/external-name"]
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.resourceGroupName
+          toFieldPath: spec.forProvider.resourceGroupName
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.providerConfigName
+          toFieldPath: spec.providerConfigRef.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.tags
+          toFieldPath: spec.forProvider.tags
+          policy:
+            fromFieldPath: Optional
+            toFieldPath: MergeObjectsAppendArrays
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.ipamPoolId
+          toFieldPath: spec.forProvider.ipAddressPool[0].id
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.size
+          toFieldPath: spec.forProvider.ipAddressPool[0].numberOfIpAddresses
+          transforms:
+          - type: map
+            map:
+              small: "128"
+              medium: "256"
+              large: "512"
+        - type: ToCompositeFieldPath
+          fromFieldPath: metadata.annotations["crossplane.io/external-name"]
+          toFieldPath: status.vnetName
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.id
+          toFieldPath: status.resourceId
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.addressSpace
+          toFieldPath: status.addressSpace
+  - step: go-templating
+    functionRef:
+      name: function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      kind: GoTemplate
+      source: Inline
+      inline:
+        template: |
+          {{- $xr := getCompositeResource . -}}
+          {{- $vnetName := get $xr.status "vnetName" -}}
+          {{- $resourceId := get $xr.status "resourceId" -}}
+          {{- $addressSpace := get $xr.status "addressSpace" -}}
+          {{- if and $xr.spec.parameters.createSubnet $vnetName $addressSpace }}
+          apiVersion: network.azure.m.upbound.io/v1beta1
+          kind: Subnet
+          metadata:
+            annotations:
+              {{ setResourceNameAnnotation "subnet" }}
+          spec:
+            forProvider:
+              resourceGroupName: {{ $xr.spec.parameters.resourceGroupName }}
+              virtualNetworkName: {{ $vnetName }}
+              addressPrefixes: {{ $addressSpace | toJson }}
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: {{ $xr.spec.parameters.providerConfigName }}
+          {{- end }}
+          {{- if and $xr.spec.parameters.peerToHub $resourceId }}
+          ---
+          apiVersion: network.azure.m.upbound.io/v1beta1
+          kind: VirtualHubConnection
+          metadata:
+            annotations:
+              {{ setResourceNameAnnotation "hub-connection" }}
+          spec:
+            forProvider:
+              virtualHubId: /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-hub/providers/Microsoft.Network/virtualHubs/hub-sweden
+              remoteVirtualNetworkId: {{ $resourceId }}
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: default
+          {{- end }}
+          {{- $subnet := getComposedResource . "subnet" }}
+          {{- $subnetId := dig "resource" "status" "atProvider" "id" "" $subnet }}
+          {{- if $subnetId }}
+          ---
+          apiVersion: platform.example.org/v1alpha1
+          kind: VirtualNetwork
+          status:
+            subnetId: {{ $subnetId }}
+          {{- end }}
+  - step: auto-ready
+    functionRef:
+      name: function-auto-ready

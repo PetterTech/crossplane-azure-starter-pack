@@ -79,6 +79,8 @@ spec:
               source: OIDCTokenFile
             clientID: "421a2b18-9b30-444b-a485-75a3455cd7bb"
             tenantID: "1abc0146-e4d2-4bf8-bc3c-455e9630f6e4"
+        readinessChecks:
+        - type: None
         patches:
         - type: FromCompositeFieldPath
           fromFieldPath: metadata.name

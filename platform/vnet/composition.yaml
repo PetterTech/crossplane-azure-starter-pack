@@ -105,10 +105,10 @@ spec:
               remoteVirtualNetworkId: {{ $resourceId }}
             providerConfigRef:
               kind: ProviderConfig
-              name: default
+              name: {{ $xr.spec.parameters.providerConfigName }}
           {{- end }}
           {{- $subnet := getComposedResource . "subnet" }}
-          {{- $subnetId := dig "resource" "status" "atProvider" "id" "" $subnet }}
+          {{- $subnetId := dig "status" "atProvider" "id" "" $subnet }}
           {{- if $subnetId }}
           ---
           apiVersion: platform.example.org/v1alpha1

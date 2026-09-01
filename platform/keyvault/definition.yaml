@@ -42,7 +42,7 @@ spec:
                     default: rg-javazone
                   providerConfigName:
                     type: string
-                    description: The ClusterProviderConfig to use, for targeting a specific subscription.
+                    description: The ProviderConfig to use, for targeting a specific subscription.
                     default: default
                   subnetId:
                     type: string

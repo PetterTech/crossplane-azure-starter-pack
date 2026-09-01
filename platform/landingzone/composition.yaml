@@ -81,7 +81,7 @@ spec:
             forProvider:
               location: swedencentral
             providerConfigRef:
-              kind: ClusterProviderConfig
+              kind: ProviderConfig
         patches:
         - type: FromCompositeFieldPath
           fromFieldPath: spec.parameters.name

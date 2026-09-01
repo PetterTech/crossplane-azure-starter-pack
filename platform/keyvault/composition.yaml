@@ -41,7 +41,7 @@ spec:
                 managed-by: crossplane
                 workload: platform-keyvault
             providerConfigRef:
-              kind: ClusterProviderConfig
+              kind: ProviderConfig
               name: default
         patches:
         - type: FromCompositeFieldPath
@@ -97,7 +97,7 @@ spec:
                 subresourceNames:
                 - vault
             providerConfigRef:
-              kind: ClusterProviderConfig
+              kind: ProviderConfig
               name: {{ $xr.spec.parameters.providerConfigName }}
           {{- end }}
   - step: auto-ready

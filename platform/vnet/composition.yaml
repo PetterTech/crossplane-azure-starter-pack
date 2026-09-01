@@ -25,7 +25,7 @@ spec:
               resourceGroupName: rg-javazone
               tags: {}
             providerConfigRef:
-              kind: ClusterProviderConfig
+              kind: ProviderConfig
               name: default
         patches:
         - type: FromCompositeFieldPath
@@ -89,7 +89,7 @@ spec:
               virtualNetworkName: {{ $vnetName }}
               addressPrefixes: {{ $addressSpace | toJson }}
             providerConfigRef:
-              kind: ClusterProviderConfig
+              kind: ProviderConfig
               name: {{ $xr.spec.parameters.providerConfigName }}
           {{- end }}
           {{- if and $xr.spec.parameters.peerToHub $resourceId }}
@@ -104,7 +104,7 @@ spec:
               virtualHubId: /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-hub/providers/Microsoft.Network/virtualHubs/hub-sweden
               remoteVirtualNetworkId: {{ $resourceId }}
             providerConfigRef:
-              kind: ClusterProviderConfig
+              kind: ProviderConfig
               name: default
           {{- end }}
           {{- $subnet := getComposedResource . "subnet" }}

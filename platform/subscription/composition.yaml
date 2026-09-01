@@ -73,7 +73,7 @@ spec:
       - name: provider-config
         base:
           apiVersion: azure.m.upbound.io/v1beta1
-          kind: ClusterProviderConfig
+          kind: ProviderConfig
           spec:
             credentials:
               source: OIDCTokenFile
@@ -93,14 +93,9 @@ spec:
           toFieldPath: spec.subscriptionID
           policy:
             fromFieldPath: Required
-        - type: FromCompositeFieldPath
+        - type: ToCompositeFieldPath
           fromFieldPath: metadata.name
           toFieldPath: status.providerConfigName
-          transforms:
-          - type: string
-            string:
-              type: Format
-              fmt: "%s-provider-config"
       - name: register-provider-network
         base:
           apiVersion: azure.m.upbound.io/v1beta1
@@ -109,7 +104,7 @@ spec:
             forProvider:
               name: Microsoft.Network
             providerConfigRef:
-              kind: ClusterProviderConfig
+              kind: ProviderConfig
         patches:
         - type: FromCompositeFieldPath
           fromFieldPath: status.subscriptionId
@@ -132,7 +127,7 @@ spec:
             forProvider:
               name: Microsoft.Storage
             providerConfigRef:
-              kind: ClusterProviderConfig
+              kind: ProviderConfig
         patches:
         - type: FromCompositeFieldPath
           fromFieldPath: status.subscriptionId
@@ -155,7 +150,7 @@ spec:
             forProvider:
               name: Microsoft.KeyVault
             providerConfigRef:
-              kind: ClusterProviderConfig
+              kind: ProviderConfig
         patches:
         - type: FromCompositeFieldPath
           fromFieldPath: status.subscriptionId
@@ -178,7 +173,7 @@ spec:
             forProvider:
               name: Microsoft.Compute
             providerConfigRef:
-              kind: ClusterProviderConfig
+              kind: ProviderConfig
         patches:
         - type: FromCompositeFieldPath
           fromFieldPath: status.subscriptionId

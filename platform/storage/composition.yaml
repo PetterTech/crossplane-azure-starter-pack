@@ -48,7 +48,7 @@ spec:
                 managed-by: crossplane
                 workload: platform-storage
             providerConfigRef:
-              kind: ClusterProviderConfig
+              kind: ProviderConfig
               name: default
         patches:
         - type: FromCompositeFieldPath
@@ -118,7 +118,7 @@ spec:
                 subresourceNames:
                 - blob
             providerConfigRef:
-              kind: ClusterProviderConfig
+              kind: ProviderConfig
               name: {{ $xr.spec.parameters.providerConfigName }}
           {{- end }}
   - step: auto-ready

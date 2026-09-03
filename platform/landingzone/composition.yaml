@@ -132,6 +132,7 @@ spec:
             parameters:
               geoRedundant: false
               networking: private
+              providerConfigKind: ProviderConfig
         patches:
         - type: FromCompositeFieldPath
           fromFieldPath: spec.parameters.name

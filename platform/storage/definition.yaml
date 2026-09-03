@@ -47,6 +47,13 @@ spec:
                     type: string
                     description: The ProviderConfig to use, for targeting a specific subscription.
                     default: default
+                  providerConfigKind:
+                    type: string
+                    description: Whether the Azure provider configuration is cluster-scoped or namespaced.
+                    enum:
+                    - ClusterProviderConfig
+                    - ProviderConfig
+                    default: ClusterProviderConfig
                   subnetId:
                     type: string
                     description: The subnet to attach the private endpoint to, when networking is private.

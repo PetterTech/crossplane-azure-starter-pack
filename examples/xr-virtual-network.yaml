@@ -5,6 +5,6 @@ metadata:
   namespace: crossplane-system
 spec:
   parameters:
-    name: vnet-javazone-spoke
+    name: vnet-nic-spoke
     tags:
       environment: demo

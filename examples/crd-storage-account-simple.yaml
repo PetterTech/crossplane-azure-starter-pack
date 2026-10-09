@@ -1,16 +1,16 @@
 apiVersion: storage.azure.m.upbound.io/v1beta1
 kind: Account
 metadata:
-  name: pettertechdemojavazone
+  name: pettertechdemonic
   namespace: crossplane-system
 spec:
   forProvider:
-    resourceGroupName: rg-javazone
+    resourceGroupName: rg-nic
     location: swedencentral
     accountTier: Standard
     accountReplicationType: LRS
     tags:
-      project: javazone
+      project: nic
       environment: demo
       managed-by: crossplane
       workload: platform-storage

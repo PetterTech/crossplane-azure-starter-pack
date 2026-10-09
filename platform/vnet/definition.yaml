@@ -32,8 +32,8 @@ spec:
                     type: string
                     description: Azure Network Manager IPAM pool ID to allocate the address space from.
                     enum:
-                    - /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-hub/providers/Microsoft.Network/networkManagers/avnm-hub/ipamPools/pool-javazone
-                    default: /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-hub/providers/Microsoft.Network/networkManagers/avnm-hub/ipamPools/pool-javazone
+                    - /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-hub/providers/Microsoft.Network/networkManagers/avnm-hub/ipamPools/pool-nic
+                    default: /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-hub/providers/Microsoft.Network/networkManagers/avnm-hub/ipamPools/pool-nic
                   size:
                     type: string
                     description: Address space size to allocate from the IPAM pool. small=/25, medium=/24, large=/23.
@@ -53,7 +53,7 @@ spec:
                   resourceGroupName:
                     type: string
                     description: The resource group to create the virtual network in.
-                    default: rg-javazone
+                    default: rg-nic
                   providerConfigName:
                     type: string
                     description: The ProviderConfig to use, for targeting a specific subscription.

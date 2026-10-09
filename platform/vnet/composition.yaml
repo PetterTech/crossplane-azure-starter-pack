@@ -22,7 +22,7 @@ spec:
           spec:
             forProvider:
               location: swedencentral
-              resourceGroupName: rg-javazone
+              resourceGroupName: rg-nic
               tags: {}
             providerConfigRef:
               kind: ProviderConfig

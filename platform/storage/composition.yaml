@@ -29,7 +29,7 @@ spec:
               localUserEnabled: false
               minTlsVersion: TLS1_2
               location: swedencentral
-              resourceGroupName: rg-javazone
+              resourceGroupName: rg-nic
               networkRules:
                 bypass:
                 - AzureServices
@@ -42,7 +42,7 @@ spec:
               sftpEnabled: true
               sharedAccessKeyEnabled: true
               tags:
-                project: javazone
+                project: nic
                 pre-created: "true"
                 environment: demo
                 managed-by: crossplane

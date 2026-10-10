@@ -1,0 +1,12 @@
+apiVersion: platform.example.org/v1alpha1
+kind: ContainerApp
+metadata:
+  name: container-app-xr
+  namespace: crossplane-system
+spec:
+  parameters:
+    name: pettertechdemoapp
+    networking: public
+    image: mcr.microsoft.com/k8se/quickstart:latest
+    tags:
+      environment: demo

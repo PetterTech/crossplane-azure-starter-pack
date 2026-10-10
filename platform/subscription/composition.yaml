@@ -55,7 +55,7 @@ spec:
           kind: ManagementGroupSubscriptionAssociation
           spec:
             forProvider:
-              managementGroupId: /providers/Microsoft.Management/managementGroups/6da022f2-f435-415c-b122-b1c65e4b2f6e
+              managementGroupId: /providers/Microsoft.Management/managementGroups/NIC
             providerConfigRef:
               kind: ClusterProviderConfig
               name: default
@@ -77,7 +77,7 @@ spec:
           spec:
             credentials:
               source: OIDCTokenFile
-            clientID: "421a2b18-9b30-444b-a485-75a3455cd7bb"
+            clientID: "859714d7-473a-4f92-af17-993476d2369c"
             tenantID: "1abc0146-e4d2-4bf8-bc3c-455e9630f6e4"
         readinessChecks:
         - type: None

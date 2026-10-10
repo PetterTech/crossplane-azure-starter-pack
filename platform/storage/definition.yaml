@@ -57,7 +57,7 @@ spec:
                   subnetId:
                     type: string
                     description: The subnet to attach the private endpoint to, when networking is private.
-                    default: /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-nic/providers/Microsoft.Network/virtualNetworks/vnet-nic/subnets/default
+                    default: /subscriptions/919021d5-21f0-482d-8303-6ad734b1a161/resourceGroups/rg-nic/providers/Microsoft.Network/virtualNetworks/vnet-nic/subnets/default
                   tags:
                     type: object
                     description: Arbitrary tags to apply to the backing storage account.

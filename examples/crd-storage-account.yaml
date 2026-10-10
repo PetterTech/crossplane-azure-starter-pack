@@ -1,7 +1,7 @@
 apiVersion: storage.azure.m.upbound.io/v1beta1
 kind: Account
 metadata:
-  name: pettertechdemocrossplan
+  name: pettertechdemocrossplane
   namespace: crossplane-system
 spec:
   forProvider:

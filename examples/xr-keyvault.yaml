@@ -5,7 +5,7 @@ metadata:
   namespace: crossplane-system
 spec:
   parameters:
-    name: pettertechdemokv
+    name: pettertechdemokeyvault
     networking: private
     tags:
       environment: demo

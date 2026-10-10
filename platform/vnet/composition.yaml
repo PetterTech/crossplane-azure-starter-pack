@@ -25,7 +25,7 @@ spec:
               resourceGroupName: rg-nic
               tags: {}
             providerConfigRef:
-              kind: ProviderConfig
+              kind: ClusterProviderConfig
               name: default
         patches:
         - type: FromCompositeFieldPath
@@ -37,6 +37,9 @@ spec:
         - type: FromCompositeFieldPath
           fromFieldPath: spec.parameters.providerConfigName
           toFieldPath: spec.providerConfigRef.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.providerConfigKind
+          toFieldPath: spec.providerConfigRef.kind
         - type: FromCompositeFieldPath
           fromFieldPath: spec.parameters.tags
           toFieldPath: spec.forProvider.tags
@@ -89,7 +92,7 @@ spec:
               virtualNetworkName: {{ $vnetName }}
               addressPrefixes: {{ $addressSpace | toJson }}
             providerConfigRef:
-              kind: ProviderConfig
+              kind: {{ $xr.spec.parameters.providerConfigKind }}
               name: {{ $xr.spec.parameters.providerConfigName }}
           {{- end }}
           {{- if and $xr.spec.parameters.peerToHub $resourceId }}
@@ -104,7 +107,7 @@ spec:
               virtualHubId: /subscriptions/5befef06-0b5f-4acc-909c-65d1950dd6b3/resourceGroups/rg-hub/providers/Microsoft.Network/virtualHubs/hub-sweden
               remoteVirtualNetworkId: {{ $resourceId }}
             providerConfigRef:
-              kind: ProviderConfig
+              kind: {{ $xr.spec.parameters.providerConfigKind }}
               name: {{ $xr.spec.parameters.providerConfigName }}
           {{- end }}
           {{- $subnet := getComposedResource . "subnet" }}

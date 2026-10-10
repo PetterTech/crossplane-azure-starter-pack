@@ -190,6 +190,29 @@ spec:
             string:
               type: Format
               fmt: "%s-provider-config"
+      - name: register-provider-app
+        base:
+          apiVersion: azure.m.upbound.io/v1beta1
+          kind: ResourceProviderRegistration
+          spec:
+            forProvider:
+              name: Microsoft.App
+            providerConfigRef:
+              kind: ProviderConfig
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: status.subscriptionId
+          toFieldPath: metadata.annotations["platform.example.org/gate"]
+          policy:
+            fromFieldPath: Required
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: spec.providerConfigRef.name
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "%s-provider-config"
   - step: auto-ready
     functionRef:
       name: function-auto-ready

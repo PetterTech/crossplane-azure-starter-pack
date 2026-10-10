@@ -101,7 +101,8 @@ spec:
           apiVersion: platform.example.org/v1alpha1
           kind: VirtualNetwork
           spec:
-            parameters: {}
+            parameters:
+              providerConfigKind: ProviderConfig
         patches:
         - type: FromCompositeFieldPath
           fromFieldPath: spec.parameters.name
@@ -159,6 +160,7 @@ spec:
           spec:
             parameters:
               networking: private
+              providerConfigKind: ProviderConfig
         patches:
         - type: FromCompositeFieldPath
           fromFieldPath: spec.parameters.name

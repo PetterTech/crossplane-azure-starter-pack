@@ -1,0 +1,189 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: containerapps.azure.containerapp.platform.example.org
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: ContainerApp
+  mode: Pipeline
+  pipeline:
+  - step: patch-and-transform
+    functionRef:
+      name: function-patch-and-transform
+    input:
+      apiVersion: pt.fn.crossplane.io/v1beta1
+      kind: Resources
+      patchSets:
+      - name: common
+        patches:
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.resourceGroupName
+          toFieldPath: spec.forProvider.resourceGroupName
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.providerConfigName
+          toFieldPath: spec.providerConfigRef.name
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.providerConfigKind
+          toFieldPath: spec.providerConfigRef.kind
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.tags
+          toFieldPath: spec.forProvider.tags
+          policy:
+            fromFieldPath: Optional
+            toFieldPath: ForceMergeObjects
+      resources:
+      - name: environment
+        base:
+          apiVersion: containerapp.azure.m.upbound.io/v1beta1
+          kind: Environment
+          spec:
+            forProvider:
+              location: swedencentral
+              resourceGroupName: rg-nic
+              publicNetworkAccess: Disabled
+              workloadProfile:
+              - name: Consumption
+                workloadProfileType: Consumption
+              tags:
+                project: nic
+                environment: demo
+                managed-by: crossplane
+                workload: platform-containerapp
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: default
+        patches:
+        - type: PatchSet
+          patchSetName: common
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: metadata.annotations["crossplane.io/external-name"]
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "%s-env"
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.networking
+          toFieldPath: spec.forProvider.publicNetworkAccess
+          transforms:
+          - type: map
+            map:
+              private: Disabled
+              public: Enabled
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.id
+          toFieldPath: status.environmentId
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.defaultDomain
+          toFieldPath: status.environmentDefaultDomain
+      - name: container-app
+        base:
+          apiVersion: containerapp.azure.m.upbound.io/v1beta1
+          kind: ContainerApp
+          spec:
+            forProvider:
+              resourceGroupName: rg-nic
+              containerAppEnvironmentIdSelector:
+                matchControllerRef: true
+              workloadProfileName: Consumption
+              revisionMode: Single
+              ingress:
+                externalEnabled: true
+                allowInsecureConnections: false
+                targetPort: 80
+                transport: auto
+                trafficWeight:
+                - latestRevision: true
+                  percentage: 100
+              template:
+                minReplicas: 1
+                maxReplicas: 1
+                container:
+                - name: app
+                  image: mcr.microsoft.com/k8se/quickstart:latest
+                  cpu: 0.25
+                  memory: 0.5Gi
+              tags:
+                project: nic
+                environment: demo
+                managed-by: crossplane
+                workload: platform-containerapp
+            providerConfigRef:
+              kind: ClusterProviderConfig
+              name: default
+        patches:
+        - type: PatchSet
+          patchSetName: common
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.name
+          toFieldPath: metadata.annotations["crossplane.io/external-name"]
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.image
+          toFieldPath: spec.forProvider.template.container[0].image
+        - type: FromCompositeFieldPath
+          fromFieldPath: spec.parameters.targetPort
+          toFieldPath: spec.forProvider.ingress.targetPort
+        - type: ToCompositeFieldPath
+          fromFieldPath: metadata.annotations["crossplane.io/external-name"]
+          toFieldPath: status.appName
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.id
+          toFieldPath: status.resourceId
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.ingress.fqdn
+          toFieldPath: status.fqdn
+        - type: ToCompositeFieldPath
+          fromFieldPath: status.atProvider.ingress.fqdn
+          toFieldPath: status.url
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "https://%s"
+  - step: go-templating
+    functionRef:
+      name: function-go-templating
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      kind: GoTemplate
+      source: Inline
+      inline:
+        template: |
+          {{- $xr := getCompositeResource . -}}
+          {{- $environment := getComposedResource . "environment" -}}
+          {{- $environmentId := coalesce (dig "status" "atProvider" "id" "" $environment) (get $xr.status "environmentId") -}}
+          {{- if and (eq $xr.spec.parameters.networking "private") $environmentId }}
+          apiVersion: network.azure.m.upbound.io/v1beta1
+          kind: PrivateEndpoint
+          metadata:
+            annotations:
+              {{ setResourceNameAnnotation "private-endpoint" }}
+              crossplane.io/external-name: {{ printf "%s-pe" $xr.spec.parameters.name | quote }}
+          spec:
+            forProvider:
+              location: swedencentral
+              resourceGroupName: {{ $xr.spec.parameters.resourceGroupName | quote }}
+              subnetId: {{ $xr.spec.parameters.subnetId | quote }}
+              privateServiceConnection:
+                name: {{ printf "%s-env" $xr.spec.parameters.name | quote }}
+                isManualConnection: false
+                privateConnectionResourceId: {{ $environmentId | quote }}
+                subresourceNames:
+                - managedEnvironments
+              tags: {{ mergeOverwrite (dict "project" "nic" "environment" "demo" "managed-by" "crossplane" "workload" "platform-containerapp") (default (dict) $xr.spec.parameters.tags) | toJson }}
+            providerConfigRef:
+              kind: {{ $xr.spec.parameters.providerConfigKind }}
+              name: {{ $xr.spec.parameters.providerConfigName | quote }}
+          {{ end }}
+          {{ $endpoint := getComposedResource . "private-endpoint" }}
+          ---
+          apiVersion: platform.example.org/v1alpha1
+          kind: ContainerApp
+          status:
+            privateEndpointId: {{ if eq $xr.spec.parameters.networking "private" }}{{ dig "status" "atProvider" "id" "" $endpoint | quote }}{{ else }}""{{ end }}
+            privateEndpointIpAddress: {{ if eq $xr.spec.parameters.networking "private" }}{{ dig "status" "atProvider" "privateServiceConnection" "privateIpAddress" "" $endpoint | quote }}{{ else }}""{{ end }}
+  - step: auto-ready
+    functionRef:
+      name: function-auto-ready

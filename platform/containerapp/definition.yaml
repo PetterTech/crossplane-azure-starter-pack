@@ -1,0 +1,111 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: containerapps.platform.example.org
+spec:
+  group: platform.example.org
+  names:
+    kind: ContainerApp
+    plural: containerapps
+  defaultCompositionRef:
+    name: containerapps.azure.containerapp.platform.example.org
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              parameters:
+                type: object
+                x-kubernetes-validations:
+                - rule: 'self.networking != "private" || (has(self.subnetId) && size(self.subnetId) > 0)'
+                  message: subnetId is required when networking is private.
+                properties:
+                  name:
+                    type: string
+                    description: Container app name. Its dedicated environment is named <name>-env.
+                    minLength: 2
+                    maxLength: 32
+                    pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$'
+                  image:
+                    type: string
+                    description: Public container image serving HTTP on targetPort.
+                    minLength: 1
+                    default: mcr.microsoft.com/k8se/quickstart:latest
+                  targetPort:
+                    type: integer
+                    description: HTTP port exposed by the container.
+                    minimum: 1
+                    maximum: 65535
+                    default: 80
+                  networking:
+                    type: string
+                    description: Whether the environment uses a private endpoint or public access. Private DNS is caller-managed.
+                    enum:
+                    - private
+                    - public
+                    default: private
+                  subnetId:
+                    type: string
+                    description: Existing subnet for the environment private endpoint, used when networking is private.
+                    minLength: 1
+                    default: /subscriptions/919021d5-21f0-482d-8303-6ad734b1a161/resourceGroups/rg-nic/providers/Microsoft.Network/virtualNetworks/vnet-nic/subnets/default
+                  resourceGroupName:
+                    type: string
+                    description: Existing resource group to create the app, environment and private endpoint in.
+                    default: rg-nic
+                  providerConfigName:
+                    type: string
+                    description: The ProviderConfig to use, for targeting a specific subscription.
+                    default: default
+                  providerConfigKind:
+                    type: string
+                    description: Whether the Azure provider configuration is cluster-scoped or namespaced. Namespaced configurations must exist in the XR namespace.
+                    enum:
+                    - ClusterProviderConfig
+                    - ProviderConfig
+                    default: ClusterProviderConfig
+                  tags:
+                    type: object
+                    description: Arbitrary tags to apply to the app, environment and private endpoint.
+                    additionalProperties:
+                      type: string
+                required:
+                - name
+            required:
+            - parameters
+          status:
+            type: object
+            properties:
+              appName:
+                type: string
+              resourceId:
+                type: string
+              environmentId:
+                type: string
+              environmentDefaultDomain:
+                type: string
+              fqdn:
+                type: string
+              url:
+                type: string
+              privateEndpointId:
+                type: string
+              privateEndpointIpAddress:
+                type: string
+    additionalPrinterColumns:
+    - name: Name
+      type: string
+      jsonPath: .spec.parameters.name
+    - name: Networking
+      type: string
+      jsonPath: .spec.parameters.networking
+    - name: URL
+      type: string
+      jsonPath: .status.url
+---

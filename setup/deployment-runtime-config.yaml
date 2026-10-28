@@ -1,3 +1,12 @@
+# Two runtime tiers. Each DRC gets its own ServiceAccount, named after the DRC, so
+# each tier has its own federated-credential subject (docs/identity-bootstrap.md).
+# No provider-azure-vending tier: no package is exclusive to the vending identity
+# (the vending identity shares the provider-azure tier, accepted exception E9).
+# No client IDs in ServiceAccount annotations: the client ID comes from the
+# ClusterProviderConfig (OIDCTokenFile). Not verified against a live cluster.
+#
+# Tier 1, shared: provider-family-azure, storage, network, keyvault, containerapp, management.
+# Subject: system:serviceaccount:crossplane-system:provider-azure
 apiVersion: pkg.crossplane.io/v1beta1
 kind: DeploymentRuntimeConfig
 metadata:
@@ -13,3 +22,21 @@ spec:
   serviceAccountTemplate:
     metadata:
       name: provider-azure
+---
+# Tier 2, identity: provider-azure-managedidentity and provider-azure-authorization only.
+# Subject: system:serviceaccount:crossplane-system:provider-azure-identity
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata:
+  name: provider-azure-identity
+spec:
+  deploymentTemplate:
+    spec:
+      selector: {}
+      template:
+        metadata:
+          labels:
+            azure.workload.identity/use: "true"
+  serviceAccountTemplate:
+    metadata:
+      name: provider-azure-identity

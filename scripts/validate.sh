@@ -72,6 +72,67 @@ pins.each do |pkg, where|
   errors << "version drift for #{pkg}: #{where}" if where.values.uniq.size > 1
 end
 
+shared_sa = "provider-azure"
+identity_sa = "provider-azure-identity"
+drcs = {}
+providers = {}
+cpcs = []
+Dir["setup/*.yaml"].sort.each do |f|
+  load_all(f).each do |d|
+    case d["kind"]
+    when "DeploymentRuntimeConfig"
+      drcs[d["metadata"]["name"]] = d
+      sa = d.dig("spec", "serviceAccountTemplate", "metadata", "name")
+      errors << "#{f}: DRC #{d["metadata"]["name"]} serviceAccountTemplate name must equal the DRC name, got #{sa.inspect}" unless sa == d["metadata"]["name"]
+      errors << "#{f}: DRC #{d["metadata"]["name"]} must label pods azure.workload.identity/use: \"true\"" unless d.dig("spec", "deploymentTemplate", "spec", "template", "metadata", "labels", "azure.workload.identity/use") == "true"
+      errors << "#{f}: DRC #{d["metadata"]["name"]} must not annotate the ServiceAccount" if d.dig("spec", "serviceAccountTemplate", "metadata", "annotations")
+    when "Provider"
+      providers[d["metadata"]["name"]] = d
+    when "ClusterProviderConfig"
+      cpcs << [f, d]
+    end
+  end
+end
+
+errors << "DRCs must be exactly #{[shared_sa, identity_sa].sort}, got #{drcs.keys.sort}" unless drcs.keys.sort == [shared_sa, identity_sa].sort
+sas = drcs.values.map { |d| d.dig("spec", "serviceAccountTemplate", "metadata", "name") }
+errors << "DRCs must not share a ServiceAccount name: #{sas}" if sas.uniq.size != sas.size
+
+tier = {
+  "provider-family-azure" => shared_sa, "provider-azure-storage" => shared_sa, "provider-azure-network" => shared_sa,
+  "provider-azure-keyvault" => shared_sa, "provider-azure-containerapp" => shared_sa, "provider-azure-management" => shared_sa,
+  "provider-azure-managedidentity" => identity_sa, "provider-azure-authorization" => identity_sa
+}
+errors << "setup/providers.yaml must contain exactly #{tier.keys.sort}, got #{providers.keys.sort}" unless providers.keys.sort == tier.keys.sort
+providers.each do |name, d|
+  ref = d.dig("spec", "runtimeConfigRef", "name")
+  errors << "Provider #{name} must set an explicit runtimeConfigRef" if ref.nil?
+  errors << "Provider #{name} must use runtime config #{tier[name]}, got #{ref.inspect}" if tier.key?(name) && ref != tier[name]
+  errors << "Provider #{name} references unknown DRC #{ref.inspect}" if ref && !drcs.key?(ref)
+end
+
+wanted_cpcs = { "platform-vending" => "<VENDING_CLIENT_ID>", "platform-identity-admin" => "<IDENTITY_ADMIN_CLIENT_ID>", "platform-runtime" => "<RUNTIME_CLIENT_ID>" }
+errors << "setup/clusterproviderconfigs.yaml must define exactly #{wanted_cpcs.keys.sort}, got #{cpcs.map { |_, d| d["metadata"]["name"] }.sort}" unless cpcs.map { |_, d| d["metadata"]["name"] }.sort == wanted_cpcs.keys.sort
+cpcs.each do |f, d|
+  n = d["metadata"]["name"]
+  errors << "#{f}: ClusterProviderConfig must not be named default" if n == "default"
+  errors << "#{f}: #{n} apiVersion must be azure.m.upbound.io/v1beta1" unless d["apiVersion"] == "azure.m.upbound.io/v1beta1"
+  errors << "#{f}: #{n} credentials.source must be OIDCTokenFile" unless d.dig("spec", "credentials", "source") == "OIDCTokenFile"
+  errors << "#{f}: #{n} clientID must be #{wanted_cpcs[n]}" if wanted_cpcs.key?(n) && d.dig("spec", "clientID") != wanted_cpcs[n]
+  errors << "#{f}: #{n} tenantID must be <TENANT_ID>" unless d.dig("spec", "tenantID") == "<TENANT_ID>"
+  errors << "#{f}: #{n} subscriptionID must be <IDENTITY_SUBSCRIPTION_ID>" unless d.dig("spec", "subscriptionID") == "<IDENTITY_SUBSCRIPTION_ID>"
+end
+Dir["setup/*.yaml"].each do |f|
+  load_all(f).each { |d| errors << "#{f}: namespaced ProviderConfig must not be shipped" if d["kind"] == "ProviderConfig" }
+end
+
+guid = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/
+(Dir["setup/*.{yaml,yml}"] + Dir["docs/*.md"]).sort.each do |f|
+  txt = File.read(f)
+  errors << "#{f}: contains a real-looking GUID (use <UPPER_SNAKE> placeholders)" if txt =~ guid
+  errors << "#{f}: secret material is not allowed" if f.start_with?("setup/") && txt =~ /clientSecret|secretRef|source:\s*Secret|kind:\s*Secret|AZURE_CLIENT_SECRET/
+end
+
 kro = pins.select { |k, _| k.end_with?("/function-kro") }
 errors << "function-kro must be pinned exactly to v0.3.0: #{kro}" unless !kro.empty? && kro.values.flat_map(&:values).uniq == ["v0.3.0"]
 errors << "setup/functions.yaml must install function-go-templating (resolver exception E6)" unless pins.keys.any? { |k| k.end_with?("/function-go-templating") }

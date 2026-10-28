@@ -1,0 +1,41 @@
+# Platform use only: tenants never reference these. Exactly three, none named
+# "default" (fail closed). Namespaced ProviderConfigs are not shipped; the
+# per-subscription ones come from the Subscription composition.
+# Bootstrap identities and their federated credentials: docs/identity-bootstrap.md.
+# Replace every <PLACEHOLDER> from your environment; never commit real IDs.
+#
+# vending: shares the provider-azure tier subject (accepted exception E9)
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ClusterProviderConfig
+metadata:
+  name: platform-vending
+spec:
+  credentials:
+    source: OIDCTokenFile
+  clientID: "<VENDING_CLIENT_ID>"
+  tenantID: "<TENANT_ID>"
+  subscriptionID: "<IDENTITY_SUBSCRIPTION_ID>"
+---
+# identity-admin: runs in the provider-azure-identity tier
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ClusterProviderConfig
+metadata:
+  name: platform-identity-admin
+spec:
+  credentials:
+    source: OIDCTokenFile
+  clientID: "<IDENTITY_ADMIN_CLIENT_ID>"
+  tenantID: "<TENANT_ID>"
+  subscriptionID: "<IDENTITY_SUBSCRIPTION_ID>"
+---
+# runtime: platform operation, no standing role beyond Reader on the identity RG
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ClusterProviderConfig
+metadata:
+  name: platform-runtime
+spec:
+  credentials:
+    source: OIDCTokenFile
+  clientID: "<RUNTIME_CLIENT_ID>"
+  tenantID: "<TENANT_ID>"
+  subscriptionID: "<IDENTITY_SUBSCRIPTION_ID>"

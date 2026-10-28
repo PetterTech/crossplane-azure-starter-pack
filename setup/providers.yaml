@@ -43,6 +43,29 @@ spec:
   runtimeConfigRef:
     name: provider-azure
 ---
+# Tier map (CRD->package verified from the v2.8.0 xpkgs, docs/identity-bootstrap.md):
+# managedidentity holds UserAssignedIdentity and FederatedIdentityCredential;
+# authorization holds RoleAssignment (and RoleDefinition, ManagementLock, policy kinds).
+# Both run in the identity tier. management (ManagementGroup, ManagementGroupSubscriptionAssociation)
+# stays shared because the vending ClusterProviderConfig trusts the shared subject (E9).
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-managedidentity
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-managedidentity:v2.8.0
+  runtimeConfigRef:
+    name: provider-azure-identity
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-authorization
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-authorization:v2.8.0
+  runtimeConfigRef:
+    name: provider-azure-identity
+---
 # Used by ContainerApp only.
 apiVersion: pkg.crossplane.io/v1
 kind: Provider

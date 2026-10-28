@@ -57,6 +57,14 @@ spec:
         - type: PatchSet
           patchSetName: common
         - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: metadata.annotations["crossplane.io/external-name"]
+          transforms:
+          - type: string
+            string:
+              type: Format
+              fmt: "%s-env"
+        - type: FromCompositeFieldPath
           fromFieldPath: spec.parameters.name
           toFieldPath: metadata.annotations["crossplane.io/external-name"]
           transforms:
@@ -92,7 +100,6 @@ spec:
               ingress:
                 externalEnabled: true
                 allowInsecureConnections: false
-                targetPort: 80
                 transport: auto
                 trafficWeight:
                 - latestRevision: true
@@ -116,6 +123,9 @@ spec:
         patches:
         - type: PatchSet
           patchSetName: common
+        - type: FromCompositeFieldPath
+          fromFieldPath: metadata.name
+          toFieldPath: metadata.annotations["crossplane.io/external-name"]
         - type: FromCompositeFieldPath
           fromFieldPath: spec.parameters.name
           toFieldPath: metadata.annotations["crossplane.io/external-name"]
@@ -152,6 +162,7 @@ spec:
       inline:
         template: |
           {{- $xr := getCompositeResource . -}}
+          {{- $name := dig "spec" "parameters" "name" $xr.metadata.name $xr -}}
           {{- $environment := getComposedResource . "environment" -}}
           {{- $environmentId := coalesce (dig "status" "atProvider" "id" "" $environment) (get $xr.status "environmentId") -}}
           {{- if and (eq $xr.spec.parameters.networking "private") $environmentId }}
@@ -160,14 +171,14 @@ spec:
           metadata:
             annotations:
               {{ setResourceNameAnnotation "private-endpoint" }}
-              crossplane.io/external-name: {{ printf "%s-pe" $xr.spec.parameters.name | quote }}
+              crossplane.io/external-name: {{ printf "%s-pe" $name | quote }}
           spec:
             forProvider:
               location: swedencentral
               resourceGroupName: {{ $xr.spec.parameters.resourceGroupName | quote }}
               subnetId: {{ $xr.spec.parameters.subnetId | quote }}
               privateServiceConnection:
-                name: {{ printf "%s-env" $xr.spec.parameters.name | quote }}
+                name: {{ printf "%s-env" $name | quote }}
                 isManualConnection: false
                 privateConnectionResourceId: {{ $environmentId | quote }}
                 subresourceNames:

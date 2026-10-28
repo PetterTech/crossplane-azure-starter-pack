@@ -1,11 +1,10 @@
 apiVersion: platform.example.org/v1alpha1
 kind: ContainerApp
 metadata:
-  name: container-app-private-xr
+  name: pettertechprivateapp
   namespace: crossplane-system
 spec:
   parameters:
-    name: pettertechprivateapp
-    image: mcr.microsoft.com/k8se/quickstart:latest
+    image: ghcr.io/pettertech/demo-app:1.0.2
     tags:
       environment: demo

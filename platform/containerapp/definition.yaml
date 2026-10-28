@@ -28,7 +28,7 @@ spec:
                 properties:
                   name:
                     type: string
-                    description: Container app name. Its dedicated environment is named <name>-env.
+                    description: Optional Azure container app name override. Defaults to metadata.name, which must then also be at most 32 characters and contain only lowercase letters, numbers, and single hyphens, starting with a letter. The dedicated environment is named <name>-env.
                     minLength: 2
                     maxLength: 32
                     pattern: '^[a-z][a-z0-9]*(-[a-z0-9]+)*$'
@@ -36,13 +36,13 @@ spec:
                     type: string
                     description: Public container image serving HTTP on targetPort.
                     minLength: 1
-                    default: mcr.microsoft.com/k8se/quickstart:latest
+                    default: ghcr.io/pettertech/demo-app:1.0.2
                   targetPort:
                     type: integer
                     description: HTTP port exposed by the container.
                     minimum: 1
                     maximum: 65535
-                    default: 80
+                    default: 8080
                   networking:
                     type: string
                     description: Whether the environment uses a private endpoint or public access. Private DNS is caller-managed.
@@ -75,8 +75,6 @@ spec:
                     description: Arbitrary tags to apply to the app, environment and private endpoint.
                     additionalProperties:
                       type: string
-                required:
-                - name
             required:
             - parameters
           status:
@@ -99,9 +97,9 @@ spec:
               privateEndpointIpAddress:
                 type: string
     additionalPrinterColumns:
-    - name: Name
+    - name: App Name
       type: string
-      jsonPath: .spec.parameters.name
+      jsonPath: .status.appName
     - name: Networking
       type: string
       jsonPath: .spec.parameters.networking

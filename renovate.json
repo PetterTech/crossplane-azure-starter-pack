@@ -1,0 +1,59 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "labels": ["dependencies", "owner:jarlaxle", "gate:imoen"],
+  "ignoreUnstable": true,
+  "crossplane": {
+    "fileMatch": ["^setup/.+\\.ya?ml$"]
+  },
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Crossplane project dependencies (package and version on separate lines)",
+      "fileMatch": ["^projects/[^/]+/crossplane-project\\.yaml$"],
+      "matchStrings": [
+        "package: (?<depName>(?:xpkg\\.crossplane\\.io|xpkg\\.upbound\\.io)/[^\\s]+)\\n\\s+version: (?<currentValue>v\\d[^\\s\"]*)"
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "semver"
+    },
+    {
+      "customType": "regex",
+      "description": "Crossplane CLI version pinned in CI",
+      "fileMatch": ["^\\.github/workflows/.+\\.ya?ml$"],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+)\\n\\s+CROSSPLANE_CLI_VERSION: (?<currentValue>v[^\\s]+)"
+      ]
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "function-kro is pre-1.0 (exception E7): exact pin, manual approval, release notes first",
+      "matchPackageNames": ["/function-kro$/"],
+      "ignoreUnstable": false,
+      "dependencyDashboardApproval": true,
+      "automerge": false,
+      "prBodyNotes": ["Read the function-kro release notes (input API changes between 0.x releases) before merging. Imoen must prove render and validate."]
+    },
+    {
+      "description": "Only the subscription-resolver step may use go-templating (exception E6)",
+      "matchPackageNames": ["/function-go-templating$/"],
+      "automerge": false
+    },
+    {
+      "description": "Never automerge any Crossplane package bump; Imoen gates every bump",
+      "matchManagers": ["crossplane", "custom.regex"],
+      "automerge": false
+    },
+    {
+      "description": "Group Azure provider family bumps",
+      "matchPackageNames": ["/^xpkg\\.upbound\\.io/upbound/provider-(family-)?azure(-|$)/"],
+      "groupName": "provider-azure"
+    },
+    {
+      "description": "Pin GitHub Actions by digest",
+      "matchManagers": ["github-actions"],
+      "pinDigests": true
+    }
+  ]
+}

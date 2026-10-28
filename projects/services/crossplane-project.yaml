@@ -1,0 +1,61 @@
+apiVersion: dev.crossplane.io/v1alpha1
+kind: Project
+metadata:
+  name: services
+spec:
+  repository: ghcr.io/pettertech/crossplane-azure-starter-pack/services
+  dependencies:
+    - type: xpkg
+      xpkg:
+        apiVersion: pkg.crossplane.io/v1
+        kind: Provider
+        package: xpkg.upbound.io/upbound/provider-family-azure
+        version: v2.8.0
+    - type: xpkg
+      xpkg:
+        apiVersion: pkg.crossplane.io/v1
+        kind: Provider
+        package: xpkg.upbound.io/upbound/provider-azure-storage
+        version: v2.8.0
+    - type: xpkg
+      xpkg:
+        apiVersion: pkg.crossplane.io/v1
+        kind: Provider
+        package: xpkg.upbound.io/upbound/provider-azure-keyvault
+        version: v2.8.0
+    - type: xpkg
+      xpkg:
+        apiVersion: pkg.crossplane.io/v1
+        kind: Provider
+        package: xpkg.upbound.io/upbound/provider-azure-network
+        version: v2.8.0
+    - type: xpkg
+      xpkg:
+        apiVersion: pkg.crossplane.io/v1
+        kind: Provider
+        package: xpkg.upbound.io/upbound/provider-azure-containerapp
+        version: v2.8.0
+    - type: xpkg
+      xpkg:
+        apiVersion: pkg.crossplane.io/v1
+        kind: Function
+        package: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform
+        version: v0.11.2
+    - type: xpkg
+      xpkg:
+        apiVersion: pkg.crossplane.io/v1
+        kind: Function
+        package: xpkg.crossplane.io/crossplane-contrib/function-kro
+        version: v0.3.0
+    - type: xpkg
+      xpkg:
+        apiVersion: pkg.crossplane.io/v1
+        kind: Function
+        package: xpkg.crossplane.io/crossplane-contrib/function-go-templating
+        version: v0.13.2
+    - type: xpkg
+      xpkg:
+        apiVersion: pkg.crossplane.io/v1
+        kind: Function
+        package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready
+        version: v0.7.3

@@ -1,0 +1,39 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Static validation
+        run: BUILD=0 scripts/validate.sh
+
+  build:
+    needs: static
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # landingzone depends on unpublished foundation/services packages; it is built once they are released (PR 16/18)
+        project: [foundation, services]
+    env:
+      # renovate: datasource=github-releases depName=crossplane/cli
+      CROSSPLANE_CLI_VERSION: v2.5.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install crossplane CLI
+        run: |
+          curl -sfL "https://raw.githubusercontent.com/crossplane/cli/${CROSSPLANE_CLI_VERSION}/install.sh" | XP_VERSION="${CROSSPLANE_CLI_VERSION}" sh
+          sudo mv crossplane /usr/local/bin/
+          crossplane version --client
+      - name: Build project
+        working-directory: projects/${{ matrix.project }}
+        run: crossplane project build

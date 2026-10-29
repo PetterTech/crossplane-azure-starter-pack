@@ -1,0 +1,19 @@
+apiVersion: platform.a5n.io/v1alpha1
+kind: VirtualNetwork
+metadata:
+  name: pettertech-spoke
+  namespace: pettertech-sandbox
+spec:
+  # Optional when the namespace has exactly one Ready Subscription.
+  subscription: pettertech-sandbox
+  parameters:
+    size: small
+    networkSecurityGroup:
+      allowInbound:
+        - name: https-from-vnet
+          port: 443
+          sourceAddressPrefix: VirtualNetwork
+    tags:
+      costCenter: "0000"
+      owner: platform-team@example.com
+      environment: sandbox

@@ -43,3 +43,19 @@ After the first sandbox subscription is vended, check that the Defender plans ar
 - **Tenant rights.** Tenants have no RBAC to add subnets or NSGs, so the VNet's single subnet and NSG are the only ones in the tenant namespace's path.
 
 After the first sandbox subscription is vended and a VirtualNetwork is Ready, check that Defender for Cloud reports no unaddressed recommendations for the VNet, subnet and NSG.
+
+## Storage baseline
+
+`StorageAccount` (`docs/apis/storageaccount.md`) creates a storage account, containers and, when private, private endpoints. These controls are prerequisites, not shipped policy.
+
+- **Private DNS.** Create the zones `privatelink.blob.core.windows.net` and `privatelink.file.core.windows.net`, and assign the Azure Policy "Configure Storage accounts to use private DNS zones" (DeployIfNotExists) at the management group. Until then private accounts are unreachable by name and fail closed (403). Follow-up D6: an optional environment key for zone IDs.
+- **Defender for Storage.** Enable the plan (malware scanning, sensitive data threat detection).
+- **Diagnostic settings.** Assign a DeployIfNotExists policy that sends blob, file, queue and table logs, plus the activity log, to Log Analytics.
+- **Backstop policies.** Audit or deny public network access and shared key access.
+- **Network access.** `networking: public` raises the Defender recommendation "Storage accounts should restrict network access". Any use needs a recorded exception.
+- **Opt-outs.** `softDeleteDays` and `versioning: false` opt-outs raise BR-1 findings.
+- **Redundancy.** LRS and ZRS are single-region. Geo-redundancy is the caller's choice.
+- **Encryption keys.** Customer-managed keys are not offered; platform-managed keys apply (E14).
+- **Subnet join (E13).** The per-subscription UAMI needs a custom role with only `Microsoft.Network/virtualNetworks/subnets/join/action`, at scope of the platform subnet and granted by the identity-admin gate (see `docs/identity-bootstrap.md`). Without it private endpoint creation fails closed (403). Blast radius: any shared-tier pod token can attach endpoints to the shared subnet and exhaust its IPs.
+
+After the first sandbox deploy, check that Defender for Cloud shows no new storage findings.

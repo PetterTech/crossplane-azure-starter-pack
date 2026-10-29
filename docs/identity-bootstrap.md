@@ -99,6 +99,8 @@ Not Network Contributor, and never subscription-wide. Without them `VirtualNetwo
 
 Owner of E11 is Petter. It is open to veto.
 
+For `StorageAccount` private endpoints (E13), grant each per-subscription UAMI a third custom role with only `Microsoft.Network/virtualNetworks/subnets/join/action`, at the platform subnet scope (never VNet or subscription). Without it private endpoint creation fails closed with a 403. Blast radius: any shared-tier pod token can attach endpoints to the shared subnet and exhaust its IPs. See `docs/tenant-controls.md`.
+
 ## Unverified until the first sandbox deploy
 
 None of these is proven outside `crossplane render` and `kind-cel.sh`. Verify each in the sandbox:

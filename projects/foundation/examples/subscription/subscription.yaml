@@ -1,0 +1,11 @@
+apiVersion: platform.a5n.io/v1alpha1
+kind: Subscription
+metadata:
+  name: pettertech-sandbox
+  namespace: pettertech-sandbox
+spec:
+  workload: DevTest
+  tags:
+    costCenter: "0000"
+    owner: platform-team@example.com
+    environment: sandbox

@@ -1,0 +1,144 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: subscriptions.platform.a5n.io
+spec:
+  scope: Namespaced
+  group: platform.a5n.io
+  names:
+    kind: Subscription
+    plural: subscriptions
+    singular: subscription
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      additionalPrinterColumns:
+        - name: SUBSCRIPTION-ID
+          type: string
+          jsonPath: .status.subscriptionId
+        - name: WORKLOAD
+          type: string
+          jsonPath: .spec.workload
+        - name: PROVIDERCONFIG
+          type: string
+          jsonPath: .status.providerConfigName
+        - name: READY
+          type: string
+          jsonPath: .status.conditions[?(@.type=='Ready')].status
+        - name: SYNCED
+          type: string
+          jsonPath: .status.conditions[?(@.type=='Synced')].status
+        - name: AGE
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: >-
+            An Azure subscription vended for this namespace, with its own managed identity
+            and ProviderConfig. Only the platform team creates Subscriptions; the namespace is the trust
+            domain, so subscriptions of different trust belong in different namespaces. Billing scope,
+            tenant and identity locations come from the platform EnvironmentConfig, never from this spec.
+            Building blocks reference a Subscription by name through their spec.subscription field.
+            Condition Ready=True means the subscription exists, the identity has access and the
+            ProviderConfig exists.
+          x-kubernetes-validations:
+            - rule: "self.metadata.name != 'default'"
+              message: "The name 'default' is reserved. Choose a descriptive name."
+            - rule: "!self.metadata.name.startsWith('platform-')"
+              message: "Names starting with 'platform-' are reserved for the platform team."
+            - rule: "self.metadata.name.matches('^[a-z][a-z0-9-]*[a-z0-9]$')"
+              message: "The name must start with a letter, then use lowercase letters, digits and '-', and end with a letter or digit."
+            - rule: "size(self.metadata.name) <= 30"
+              message: "The name must be at most 30 characters so that derived Azure names fit."
+          properties:
+            spec:
+              type: object
+              description: >-
+                Desired subscription. Every field is optional. There is no managementGroup field:
+                the provider cannot place a subscription in a management group, so the target management
+                group is a platform setting. There is no providerConfig field either; the platform creates
+                the ProviderConfig and reports its name in status.providerConfigName.
+              x-kubernetes-validations:
+                - rule: "!has(oldSelf.workload) || (has(self.workload) && self.workload == oldSelf.workload)"
+                  message: "spec.workload can't be changed once set. Create a new Subscription instead."
+              properties:
+                workload:
+                  type: string
+                  description: >-
+                    Azure workload type of the subscription. Production is the safe default; use DevTest
+                    only for non-production work. Can't be changed after creation.
+                  enum: [Production, DevTest]
+                  default: Production
+                tags:
+                  type: object
+                  description: >-
+                    Tags added to the subscription. Only costCenter, owner and environment are allowed
+                    (at most 10 entries, values up to 256 characters). The platform adds owner, namespace and
+                    XR UID tags itself; values here can't override them.
+                  maxProperties: 10
+                  additionalProperties:
+                    type: string
+                    maxLength: 256
+                  x-kubernetes-validations:
+                    - rule: "self.all(k, k in ['costCenter', 'owner', 'environment'])"
+                      message: "Allowed tag keys: costCenter, owner, environment."
+            status:
+              type: object
+              description: >-
+                Observed state, written by the platform. The pinned values (subscriptionId,
+                subscriptionUid, providerConfigName, identity and environment) are written once and can't
+                be changed or removed afterwards, even by administrators; a tampered resource is recovered
+                by deleting it. Conditions (Ready, Synced and the platform conditions such as
+                EnvironmentValid and EnvironmentDrift) are managed by Crossplane and are not declared here.
+                Tenants have no write access to status.
+              x-kubernetes-validations:
+                - rule: "!has(oldSelf.subscriptionId) || (has(self.subscriptionId) && self.subscriptionId == oldSelf.subscriptionId)"
+                  message: "status.subscriptionId is write-once."
+                - rule: "!has(oldSelf.subscriptionUid) || (has(self.subscriptionUid) && self.subscriptionUid == oldSelf.subscriptionUid)"
+                  message: "status.subscriptionUid is write-once."
+                - rule: "!has(oldSelf.providerConfigName) || (has(self.providerConfigName) && self.providerConfigName == oldSelf.providerConfigName)"
+                  message: "status.providerConfigName is write-once."
+                - rule: "!has(oldSelf.identity) || (has(self.identity) && self.identity == oldSelf.identity)"
+                  message: "status.identity is write-once."
+                - rule: "!has(oldSelf.environment) || (has(self.environment) && self.environment == oldSelf.environment)"
+                  message: "status.environment is write-once."
+              properties:
+                subscriptionId:
+                  type: string
+                  description: Azure subscription ID (GUID). Consumers pin it and verify it on every reconcile.
+                subscriptionUid:
+                  type: string
+                  description: >-
+                    Kubernetes UID of this Subscription, recorded together with subscriptionId. Consumers
+                    pin it so that deleting and recreating a Subscription with the same name is detected.
+                providerConfigName:
+                  type: string
+                  description: Name of the namespaced ProviderConfig (same namespace) that acts in this subscription. Equal to the Subscription name.
+                identity:
+                  type: object
+                  description: The user-assigned managed identity created for this subscription. It has Contributor on the subscription.
+                  properties:
+                    resourceId:
+                      type: string
+                      description: Azure resource ID of the managed identity.
+                    clientId:
+                      type: string
+                      description: Client ID used by the ProviderConfig.
+                    principalId:
+                      type: string
+                      description: Object (principal) ID, used for the role assignment.
+                environment:
+                  type: object
+                  description: >-
+                    Effective environment values recorded when the Subscription was first composed. Later
+                    changes to the EnvironmentConfig are reported by the EnvironmentDrift condition and do not
+                    move existing resources.
+                  properties:
+                    location:
+                      type: string
+                      description: Azure region used for the managed identity.
+                    resourceGroupName:
+                      type: string
+                      description: Resource group that holds the managed identity.

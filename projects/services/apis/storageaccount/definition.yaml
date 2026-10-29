@@ -1,0 +1,261 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: storageaccounts.platform.a5n.io
+spec:
+  scope: Namespaced
+  group: platform.a5n.io
+  names:
+    kind: StorageAccount
+    plural: storageaccounts
+    singular: storageaccount
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      additionalPrinterColumns:
+        - name: SUBSCRIPTION
+          type: string
+          jsonPath: .status.subscription
+        - name: LOCATION
+          type: string
+          jsonPath: .status.environment.location
+        - name: ACCOUNT
+          type: string
+          jsonPath: .status.accountName
+        - name: NETWORKING
+          type: string
+          jsonPath: .spec.parameters.networking
+        - name: READY
+          type: string
+          jsonPath: .status.conditions[?(@.type=='Ready')].status
+        - name: SYNCED
+          type: string
+          jsonPath: .status.conditions[?(@.type=='Synced')].status
+        - name: AGE
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: >-
+            An Azure storage account with hardened settings: HTTPS only, TLS 1.2, no shared key
+            access (Microsoft Entra ID only), no anonymous blob access, and no public network access
+            unless networking is explicitly set to public. With networking private (the default) the
+            platform adds a private endpoint for blob in the platform subnet; the subnet, the default
+            region and the default resource group come from the platform EnvironmentConfig, never from
+            this spec. Condition Ready=True means the account and, when private, its private endpoint
+            exist.
+          properties:
+            spec:
+              type: object
+              description: Desired storage account. Every field is optional.
+              default: {}
+              x-kubernetes-validations:
+                - rule: "!has(oldSelf.subscription) || (has(self.subscription) && self.subscription == oldSelf.subscription)"
+                  message: "spec.subscription can't be changed once set. Create a new StorageAccount instead."
+                - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.location) || (has(self.parameters) && has(self.parameters.location) && self.parameters.location == oldSelf.parameters.location)"
+                  message: "spec.parameters.location can't be changed once set. Create a new StorageAccount instead."
+                - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.resourceGroupName) || (has(self.parameters) && has(self.parameters.resourceGroupName) && self.parameters.resourceGroupName == oldSelf.parameters.resourceGroupName)"
+                  message: "spec.parameters.resourceGroupName can't be changed once set. Create a new StorageAccount instead."
+                - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.name) || (has(self.parameters) && has(self.parameters.name) && self.parameters.name == oldSelf.parameters.name)"
+                  message: "spec.parameters.name can't be changed once set. Create a new StorageAccount instead."
+                - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.accountTier) || (has(self.parameters) && has(self.parameters.accountTier) && self.parameters.accountTier == oldSelf.parameters.accountTier)"
+                  message: "spec.parameters.accountTier can't be changed once set. Create a new StorageAccount instead."
+                - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.accountKind) || (has(self.parameters) && has(self.parameters.accountKind) && self.parameters.accountKind == oldSelf.parameters.accountKind)"
+                  message: "spec.parameters.accountKind can't be changed once set. Create a new StorageAccount instead."
+              properties:
+                subscription:
+                  type: string
+                  description: >-
+                    Name of a Subscription in this namespace that the resources are created in. Optional.
+                    If omitted, the platform uses the namespace's only Ready Subscription. If the namespace
+                    has none or more than one, no resources are created and the SubscriptionResolved condition
+                    explains why. Set this field to choose explicitly. The resolved name is recorded in
+                    status.subscription and never changes afterwards. It can't be changed once set; to move,
+                    create a new resource.
+                  maxLength: 63
+                  pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                parameters:
+                  type: object
+                  description: Settings of the storage account.
+                  default: {}
+                  x-kubernetes-validations:
+                    - rule: "!has(self.accountTier) || self.accountTier != 'Premium' || (has(self.accountKind) && self.accountKind != 'StorageV2')"
+                      message: "accountTier Premium requires accountKind BlockBlobStorage or FileStorage."
+                    - rule: "!has(self.accountKind) || self.accountKind == 'StorageV2' || (has(self.accountTier) && self.accountTier == 'Premium')"
+                      message: "accountKind BlockBlobStorage and FileStorage require accountTier Premium."
+                    - rule: "!has(self.accountTier) || self.accountTier != 'Premium' || !has(self.replication) || self.replication in ['LRS', 'ZRS']"
+                      message: "accountTier Premium supports only replication LRS or ZRS."
+                    - rule: "!has(self.allowedIpRanges) || size(self.allowedIpRanges) == 0 || (has(self.networking) && self.networking == 'public')"
+                      message: "allowedIpRanges requires networking public."
+                  properties:
+                    name:
+                      type: string
+                      description: >-
+                        Storage account name in Azure (globally unique). Optional; the platform derives a
+                        unique name from the namespace and the name of this resource. Can't be changed
+                        after creation.
+                      minLength: 3
+                      maxLength: 24
+                      pattern: "^[a-z0-9]+$"
+                    location:
+                      type: string
+                      description: >-
+                        Azure region. Optional; defaults to the platform default region. The platform may
+                        restrict the allowed regions (EnvironmentValid=False, reason LocationNotAllowed).
+                        Recorded in status.environment on first use and can't be changed afterwards.
+                      pattern: "^[a-z][a-z0-9]*$"
+                      maxLength: 40
+                    resourceGroupName:
+                      type: string
+                      description: >-
+                        Resource group for the storage account. Optional; defaults to the platform default
+                        resource group. Recorded in status.environment on first use and can't be changed
+                        afterwards.
+                      pattern: "^[a-zA-Z0-9._()-]*[a-zA-Z0-9_()-]$"
+                      minLength: 1
+                      maxLength: 90
+                    networking:
+                      type: string
+                      description: >-
+                        private (default): public network access is disabled and the platform creates a
+                        private endpoint for blob in the platform subnet; this needs a subnet in the
+                        platform EnvironmentConfig, otherwise nothing is created and the EnvironmentValid
+                        condition explains why. public: the account is reachable from the Internet but the
+                        firewall denies everything except allowedIpRanges.
+                      enum: [private, public]
+                      default: private
+                    allowedIpRanges:
+                      type: array
+                      description: >-
+                        Public IPv4 addresses or CIDR ranges allowed through the storage firewall. Only
+                        with networking public. At most 10. Empty means the firewall allows no one.
+                      maxItems: 10
+                      items:
+                        type: string
+                        maxLength: 18
+                        pattern: "^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}(/(3[0-2]|[12]?[0-9]))?$"
+                      x-kubernetes-list-type: set
+                    replication:
+                      type: string
+                      description: >-
+                        Redundancy: LRS (one datacentre), ZRS (three zones, default), GRS (paired region),
+                        GZRS (zones plus paired region). Can be changed later within the limits Azure allows.
+                      enum: [LRS, ZRS, GRS, GZRS]
+                      default: ZRS
+                    accountTier:
+                      type: string
+                      description: Performance tier. Can't be changed after creation.
+                      enum: [Standard, Premium]
+                      default: Standard
+                    accountKind:
+                      type: string
+                      description: >-
+                        Account kind. StorageV2 for general purpose (Standard tier); BlockBlobStorage or
+                        FileStorage for Premium. Can't be changed after creation.
+                      enum: [StorageV2, BlockBlobStorage, FileStorage]
+                      default: StorageV2
+                    containers:
+                      type: array
+                      description: Blob containers to create, all private. At most 20.
+                      maxItems: 20
+                      items:
+                        type: object
+                        required: [name]
+                        properties:
+                          name:
+                            type: string
+                            description: Container name, unique in the list.
+                            minLength: 3
+                            maxLength: 63
+                            pattern: "^[a-z0-9]([a-z0-9]|-[a-z0-9])*$"
+                      x-kubernetes-list-type: map
+                      x-kubernetes-list-map-keys: [name]
+                    softDeleteDays:
+                      type: integer
+                      description: Days deleted blobs and containers can be recovered. 0 turns soft delete off.
+                      minimum: 0
+                      maximum: 365
+                      default: 7
+                    versioning:
+                      type: boolean
+                      description: Whether blob versioning is on.
+                      default: true
+                    tags:
+                      type: object
+                      description: >-
+                        Tags added to the storage account. Only costCenter, owner and environment are allowed
+                        (at most 10 entries, values up to 256 characters). The platform adds the a5n- tags
+                        itself; the a5n- prefix is reserved.
+                      maxProperties: 10
+                      additionalProperties:
+                        type: string
+                        maxLength: 256
+                      x-kubernetes-validations:
+                        - rule: "self.all(k, k in ['costCenter', 'owner', 'environment'])"
+                          message: "Allowed tag keys: costCenter, owner, environment."
+            status:
+              type: object
+              description: >-
+                Observed state, written by the platform. The pinned values (subscription, subscriptionUid,
+                subscriptionId and environment) are written once and can't be changed or removed afterwards,
+                even by administrators; a tampered resource is recovered by deleting it. Conditions
+                (Ready, Synced, SubscriptionResolved, EnvironmentValid, EnvironmentDrift) are managed by the
+                platform and Crossplane and are not declared here. Tenants have no write access to status.
+              x-kubernetes-validations:
+                - rule: "!has(oldSelf.subscription) || (has(self.subscription) && self.subscription == oldSelf.subscription)"
+                  message: "status.subscription is write-once."
+                - rule: "!has(oldSelf.subscriptionUid) || (has(self.subscriptionUid) && self.subscriptionUid == oldSelf.subscriptionUid)"
+                  message: "status.subscriptionUid is write-once."
+                - rule: "!has(oldSelf.subscriptionId) || (has(self.subscriptionId) && self.subscriptionId == oldSelf.subscriptionId)"
+                  message: "status.subscriptionId is write-once."
+                - rule: "!has(oldSelf.environment) || (has(self.environment) && self.environment == oldSelf.environment)"
+                  message: "status.environment is write-once."
+              properties:
+                subscription:
+                  type: string
+                  description: Name of the Subscription the resources are created in, recorded once and never re-resolved.
+                subscriptionUid:
+                  type: string
+                  description: Kubernetes UID of that Subscription. Detects deleting and recreating a Subscription with the same name.
+                subscriptionId:
+                  type: string
+                  description: Azure subscription ID (GUID) of that Subscription.
+                environment:
+                  type: object
+                  description: >-
+                    Effective environment values recorded once, as a whole, when the storage account was
+                    first composed. Later changes to the EnvironmentConfig do not move existing resources;
+                    the EnvironmentDrift condition reports the difference.
+                  properties:
+                    location:
+                      type: string
+                      description: Azure region in use.
+                    resourceGroupName:
+                      type: string
+                      description: Resource group in use.
+                    subnetId:
+                      type: string
+                      description: >-
+                        Subnet of the EnvironmentConfig at first composition, if the platform had one. The
+                        private endpoint is composed from this value when networking is private.
+                accountName:
+                  type: string
+                  description: Name of the storage account in Azure.
+                resourceId:
+                  type: string
+                  description: Azure resource ID of the storage account.
+                privateEndpointId:
+                  type: string
+                  description: Azure resource ID of the private endpoint. Set once it exists; only when networking is private.
+                endpoints:
+                  type: object
+                  description: Service endpoints of the account. With networking private they resolve to the private endpoint inside the virtual network only.
+                  properties:
+                    blob:
+                      type: string
+                      description: Blob service endpoint URL.
+                    file:
+                      type: string
+                      description: File service endpoint URL.

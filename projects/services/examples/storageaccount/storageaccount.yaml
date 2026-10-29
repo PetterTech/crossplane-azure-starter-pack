@@ -1,0 +1,26 @@
+apiVersion: platform.a5n.io/v1alpha1
+kind: StorageAccount
+metadata:
+  name: pettertech-data
+  namespace: pettertech-sandbox
+spec:
+  # Private by default: no public access, private endpoint in the platform subnet.
+  # subscription is optional when the namespace has exactly one Ready Subscription.
+  subscription: pettertech-sandbox
+  parameters:
+    replication: ZRS
+    containers:
+      - name: raw
+      - name: curated
+    tags:
+      costCenter: "0000"
+      owner: platform-team@example.com
+      environment: sandbox
+---
+# Minimal: every field has a safe default.
+apiVersion: platform.a5n.io/v1alpha1
+kind: StorageAccount
+metadata:
+  name: pettertech-minimal
+  namespace: pettertech-sandbox
+spec: {}

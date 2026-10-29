@@ -1,0 +1,18 @@
+# Account MR Ready (reconcile 3).
+apiVersion: storage.azure.m.upbound.io/v1beta1
+kind: Account
+metadata:
+  name: data-account
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: account
+    crossplane.io/external-name: stfixedname01
+  labels:
+    crossplane.io/composite: data
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.Storage/storageAccounts/stfixedname01
+    primaryBlobEndpoint: https://stfixedname01.blob.core.windows.net/
+    primaryFileEndpoint: https://stfixedname01.file.core.windows.net/
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

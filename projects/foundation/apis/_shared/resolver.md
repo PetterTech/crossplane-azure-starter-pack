@@ -34,6 +34,8 @@ Because a custom condition set next to a Fatal result is shown as Unknown, these
 
 function-kro cannot read the environment context. The resolver therefore also writes the values kro needs into `status.environment` (`ipamPoolId`, and `hubVirtualHubId` when the platform has a hub, both from the EnvironmentConfig on first use; once `status.environment` exists it is re-emitted unchanged, because the XRD makes it write-once as a whole object), and kro reads them through an `externalRef` to the XR itself. Nothing is composed on the first reconcile, because the pin does not exist yet.
 
+`StorageAccount` (in `projects/services`, which carries its own inline copy; `validate.sh` checks every `projects/*/apis/*/composition.yaml` against this one file) adds `subnetId` to `status.environment`. The live value is used only when it is a well-formed subnet resource ID; a missing, placeholder or malformed value counts as absent. `SubnetNotConfigured` (non-fatal, `EnvironmentValid=False`) is reported when `networking` is private and there is no subnet. If nothing is pinned yet, the whole `status.environment` is withheld, so nothing is composed or pinned until the platform provides a subnet. Once pinned the value is re-emitted unchanged and drift is reported.
+
 ## Adding a building block
 
 Add a row to the per-kind key table (`$required`) for the EnvironmentConfig keys the block uses, copy the step from an existing composition, run `sync-resolver.sh`, and declare any new `status.environment` key in the XRD.

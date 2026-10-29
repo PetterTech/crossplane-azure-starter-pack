@@ -1,0 +1,22 @@
+# Parameters are written out in full: crossplane render does not apply XRD defaults to the input XR.
+apiVersion: platform.a5n.io/v1alpha1
+kind: StorageAccount
+metadata:
+  name: data
+  namespace: team-a
+  uid: 7a1b2c3d-0000-4000-8000-000000000002
+spec:
+  parameters:
+    networking: private
+    replication: ZRS
+    accountTier: Standard
+    accountKind: StorageV2
+    softDeleteDays: 7
+    versioning: true
+    containers:
+      - name: raw
+      - name: curated
+    tags:
+      costCenter: "0000"
+      owner: platform-team@example.com
+      environment: sandbox

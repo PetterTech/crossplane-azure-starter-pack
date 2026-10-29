@@ -290,6 +290,26 @@ spec:
             {{- $envMsg := "The platform environment is valid." -}}
             {{- $envOK := true -}}
             {{- $envReason := "EnvironmentValid" -}}
+            {{- $subnet := "" -}}
+            {{- $hold := false -}}
+            {{- if eq $kind "StorageAccount" -}}
+              {{- /* The private endpoint subnet. A missing, placeholder or malformed subnetId with networking private pins nothing (the whole status.environment is withheld), so nothing is composed until the platform fixes it. */ -}}
+              {{- $private := eq (get $params "networking" | default "private") "private" -}}
+              {{- $liveSubnet := get $env "subnetId" | default "" -}}
+              {{- if not (regexMatch `(?i)^/subscriptions/[^/]+/resourcegroups/[^/]+/providers/microsoft\.network/virtualnetworks/[^/]+/subnets/[^/]+$` $liveSubnet) }}{{ $liveSubnet = "" }}{{ end -}}
+              {{- if $pinned -}}
+                {{- $subnet = get $pinEnv "subnetId" | default "" -}}
+                {{- if ne $subnet $liveSubnet }}{{ $drift = append $drift (ternary "a subnetId was added to the EnvironmentConfig after this storage account was created and is not used" "the subnetId in the EnvironmentConfig differs from the pinned subnet; the pinned subnet is kept" (eq $subnet "")) }}{{ end -}}
+              {{- else -}}
+                {{- $subnet = $liveSubnet -}}
+              {{- end -}}
+              {{- if and $private (not $subnet) -}}
+                {{- $envOK = false -}}
+                {{- $envReason = "SubnetNotConfigured" -}}
+                {{- $envMsg = ternary "networking is private but the platform had no valid subnetId configured when this storage account was created. The private endpoint is not created; recreate the storage account after the platform sets subnetId." "networking is private but the platform-environment EnvironmentConfig has no valid subnetId (missing, a placeholder or malformed). Nothing is created until it is set." $pinned -}}
+                {{- if not $pinned }}{{ $hold = true }}{{ end -}}
+              {{- end -}}
+            {{- end -}}
             {{- if eq $kind "VirtualNetwork" -}}
               {{- $peer := true -}}
               {{- if hasKey $params "peerToHub" }}{{ $peer = get $params "peerToHub" }}{{ end -}}
@@ -318,13 +338,18 @@ spec:
               subscription: {{ $chosen.metadata.name | quote }}
               subscriptionUid: {{ $chosen.metadata.uid | quote }}
               subscriptionId: {{ $subID | quote }}
+            {{- if not $hold }}
               environment:
                 location: {{ $loc | quote }}
                 resourceGroupName: {{ $rg | quote }}
+            {{- if and (eq $kind "StorageAccount") $subnet }}
+                subnetId: {{ $subnet | quote }}
+            {{- end }}
             {{- if eq $kind "VirtualNetwork" }}
                 ipamPoolId: {{ $ipam | quote }}
             {{- if $hubOut }}
                 hubVirtualHubId: {{ $hubOut | quote }}
+            {{- end }}
             {{- end }}
             {{- end }}
             ---

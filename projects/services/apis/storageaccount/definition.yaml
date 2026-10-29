@@ -89,6 +89,8 @@ spec:
                       message: "accountTier Premium supports only replication LRS or ZRS."
                     - rule: "!has(self.allowedIpRanges) || size(self.allowedIpRanges) == 0 || (has(self.networking) && self.networking == 'public')"
                       message: "allowedIpRanges requires networking public."
+                    - rule: "!has(self.containers) || size(self.containers) == 0 || !has(self.accountKind) || self.accountKind != 'FileStorage'"
+                      message: "containers require accountKind StorageV2 or BlockBlobStorage; FileStorage has no blob service."
                   properties:
                     name:
                       type: string

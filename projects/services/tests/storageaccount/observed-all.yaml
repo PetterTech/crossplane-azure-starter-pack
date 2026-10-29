@@ -1,0 +1,62 @@
+# Account, both containers and the private endpoint Ready (reconcile 4).
+apiVersion: storage.azure.m.upbound.io/v1beta1
+kind: Account
+metadata:
+  name: data-account
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: account
+    crossplane.io/external-name: stfixedname01
+  labels:
+    crossplane.io/composite: data
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.Storage/storageAccounts/stfixedname01
+    primaryBlobEndpoint: https://stfixedname01.blob.core.windows.net/
+    primaryFileEndpoint: https://stfixedname01.file.core.windows.net/
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: PrivateEndpoint
+metadata:
+  name: data-pe
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: privateEndpoint
+    crossplane.io/external-name: stfixedname01-pe
+  labels:
+    crossplane.io/composite: data
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.Network/privateEndpoints/stfixedname01-pe
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: storage.azure.m.upbound.io/v1beta1
+kind: Container
+metadata:
+  name: data-curated-r6d7p2
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: containers-data-curated-r6d7p2
+    crossplane.io/external-name: curated
+  labels:
+    crossplane.io/composite: data
+status:
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: storage.azure.m.upbound.io/v1beta1
+kind: Container
+metadata:
+  name: data-raw-dc25jv
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: containers-data-raw-dc25jv
+    crossplane.io/external-name: raw
+  labels:
+    crossplane.io/composite: data
+status:
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

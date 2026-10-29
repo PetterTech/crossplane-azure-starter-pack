@@ -51,7 +51,7 @@ spec:
             - rule: "self.metadata.name.matches('^[a-z][a-z0-9-]*[a-z0-9]$')"
               message: "The name must start with a letter, then use lowercase letters, digits and '-', and end with a letter or digit."
             - rule: "size(self.metadata.name) <= 30"
-              message: "The name must be at most 30 characters so that derived Azure names fit."
+              message: "The name must be at most 30 characters so that the derived Azure names stay short."
           properties:
             spec:
               type: object
@@ -75,8 +75,9 @@ spec:
                   type: object
                   description: >-
                     Tags added to the subscription. Only costCenter, owner and environment are allowed
-                    (at most 10 entries, values up to 256 characters). The platform adds owner, namespace and
-                    XR UID tags itself; values here can't override them.
+                    (at most 10 entries, values up to 256 characters). The platform adds the tags a5n-namespace,
+                    a5n-owner-xr and a5n-xr-uid itself and they can't be overridden: the a5n- prefix is
+                    reserved for the platform.
                   maxProperties: 10
                   additionalProperties:
                     type: string
@@ -90,8 +91,7 @@ spec:
                 Observed state, written by the platform. The pinned values (subscriptionId,
                 subscriptionUid, providerConfigName, identity and environment) are written once and can't
                 be changed or removed afterwards, even by administrators; a tampered resource is recovered
-                by deleting it. Conditions (Ready, Synced and the platform conditions such as
-                EnvironmentValid and EnvironmentDrift) are managed by Crossplane and are not declared here.
+                by deleting it. Conditions (Ready, Synced) are managed by Crossplane and are not declared here.
                 Tenants have no write access to status.
               x-kubernetes-validations:
                 - rule: "!has(oldSelf.subscriptionId) || (has(self.subscriptionId) && self.subscriptionId == oldSelf.subscriptionId)"
@@ -133,8 +133,7 @@ spec:
                   type: object
                   description: >-
                     Effective environment values recorded when the Subscription was first composed. Later
-                    changes to the EnvironmentConfig are reported by the EnvironmentDrift condition and do not
-                    move existing resources.
+                    changes to the EnvironmentConfig do not move existing resources.
                   properties:
                     location:
                       type: string

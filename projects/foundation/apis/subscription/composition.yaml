@@ -1,0 +1,603 @@
+# Subscription vending: one subscription, one UAMI that acts in it, and a namespaced
+# ProviderConfig named after the XR.
+#
+# Pipeline: environment -> verify-subscription (go-templating, one equality check) ->
+# patch-and-transform -> auto-ready. The order of creation comes from Required patches on
+# write-once XR status values (each step appears one reconcile after the value it needs), not
+# from a resource graph, so function-kro is not used.
+#
+# Fail closed: every environment value is validated in the patch that uses it. A missing
+# key, a <PLACEHOLDER> or a malformed ID makes the function fail and nothing is created.
+# Credentials: Subscription and the management group association use platform-vending, the
+# identity MRs use platform-identity-admin. No secrets, no ManagementLock.
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: subscriptions.platform.a5n.io
+  labels:
+    platform.a5n.io/api: subscription
+spec:
+  compositeTypeRef:
+    apiVersion: platform.a5n.io/v1alpha1
+    kind: Subscription
+  mode: Pipeline
+  pipeline:
+    - step: environment
+      functionRef:
+        name: function-environment-configs
+      input:
+        apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+        kind: Input
+        spec:
+          environmentConfigs:
+            - type: Reference
+              ref:
+                name: platform-environment
+
+    # Equality gate (Drizzt C1). P&T cannot compare two values, so a small template does it:
+    # the subscription ID pinned in XR status must equal the ID the Subscription MR observes.
+    # First adoption (no pin yet) pins the observed ID; only a later reconcile with pin ==
+    # observed sets subscriptionVerified, which the role assignment and ProviderConfig require.
+    - step: verify-subscription
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{- $env := index .context "apiextensions.crossplane.io/environment" | default dict }}
+            {{- $pinned := dig "observed" "composite" "resource" "status" "subscriptionId" "" . }}
+            {{- $seen := dig "observed" "resources" "subscription" "resource" "status" "atProvider" "subscriptionId" "" . }}
+            {{- $pin := $pinned | default $seen }}
+            {{- if $pin }}{{ $_ := set $env "pin" (dict "subscriptionId" $pin) }}{{ end }}
+            {{- if and $pinned $seen (eq $pinned $seen) }}{{ $_ := set $env "subscriptionVerified" $pinned }}{{ end }}
+            ---
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: Context
+            data:
+              apiextensions.crossplane.io/environment: {{ $env | toJson }}
+
+    - step: compose
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        environment:
+          # The environment is also the scratch space for derived values. Pinned values
+          # win over the live EnvironmentConfig, and every pin is carried forward from the
+          # observed XR status so it is re-emitted unchanged on each reconcile (write-once).
+          patches:
+            - type: FromCompositeFieldPath
+              fromFieldPath: status.environment.location
+              toFieldPath: location
+              policy:
+                fromFieldPath: Optional
+            - type: FromCompositeFieldPath
+              fromFieldPath: status.environment.resourceGroupName
+              toFieldPath: identityResourceGroupName
+              policy:
+                fromFieldPath: Optional
+            - type: ToCompositeFieldPath
+              fromFieldPath: location
+              toFieldPath: status.environment.location
+            - type: ToCompositeFieldPath
+              fromFieldPath: identityResourceGroupName
+              toFieldPath: status.environment.resourceGroupName
+            - type: ToCompositeFieldPath
+              fromFieldPath: pin.subscriptionId
+              toFieldPath: status.subscriptionId
+              policy:
+                fromFieldPath: Optional
+            - type: FromCompositeFieldPath
+              fromFieldPath: metadata.uid
+              toFieldPath: pin.subscriptionUid
+              policy:
+                fromFieldPath: Required
+            - type: FromCompositeFieldPath
+              fromFieldPath: status.subscriptionUid
+              toFieldPath: pin.subscriptionUid
+              policy:
+                fromFieldPath: Optional
+            - type: ToCompositeFieldPath
+              fromFieldPath: pin.subscriptionUid
+              toFieldPath: status.subscriptionUid
+              policy:
+                fromFieldPath: Optional
+            - type: FromCompositeFieldPath
+              fromFieldPath: status.providerConfigName
+              toFieldPath: pin.providerConfigName
+              policy:
+                fromFieldPath: Optional
+            - type: ToCompositeFieldPath
+              fromFieldPath: pin.providerConfigName
+              toFieldPath: status.providerConfigName
+              policy:
+                fromFieldPath: Optional
+            - type: FromCompositeFieldPath
+              fromFieldPath: status.identity.resourceId
+              toFieldPath: pin.identity.resourceId
+              policy:
+                fromFieldPath: Optional
+            - type: ToCompositeFieldPath
+              fromFieldPath: pin.identity.resourceId
+              toFieldPath: status.identity.resourceId
+              policy:
+                fromFieldPath: Optional
+            - type: FromCompositeFieldPath
+              fromFieldPath: status.identity.clientId
+              toFieldPath: pin.identity.clientId
+              policy:
+                fromFieldPath: Optional
+            - type: ToCompositeFieldPath
+              fromFieldPath: pin.identity.clientId
+              toFieldPath: status.identity.clientId
+              policy:
+                fromFieldPath: Optional
+            - type: FromCompositeFieldPath
+              fromFieldPath: status.identity.principalId
+              toFieldPath: pin.identity.principalId
+              policy:
+                fromFieldPath: Optional
+            - type: ToCompositeFieldPath
+              fromFieldPath: pin.identity.principalId
+              toFieldPath: status.identity.principalId
+              policy:
+                fromFieldPath: Optional
+            # Names: <namespace>-<name> for display, plus an 8 character hash of
+            # namespace/name for the central identity resource group (collision across
+            # namespaces such as a-b/c and a/b-c). The display name is capped at 64
+            # characters (Azure's subscription name limit; 63+1+30 can reach 94), so longer
+            # names fail closed instead of being truncated. XRD CEL can't see the namespace.
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: metadata.namespace
+                  - fromFieldPath: metadata.name
+                strategy: string
+                string:
+                  fmt: "%s-%s"
+              toFieldPath: displayName
+              transforms:
+                - type: string
+                  string:
+                    type: Regexp
+                    regexp:
+                      match: '^.{1,64}$'
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: metadata.namespace
+                  - fromFieldPath: metadata.name
+                strategy: string
+                string:
+                  fmt: "%s/%s"
+              toFieldPath: nameHash
+              policy:
+                fromFieldPath: Required
+              transforms:
+                - type: string
+                  string:
+                    type: Convert
+                    convert: ToSha256
+                - type: string
+                  string:
+                    type: Regexp
+                    regexp:
+                      match: '^[0-9a-f]{8}'
+            # Fail closed: a missing key is only a warning and a skipped resource in a
+            # resource patch, but a fatal error in an environment patch. Check every key
+            # the composition uses here. The destination annotation on the XR is ignored by
+            # Crossplane (desired XR metadata is not applied); the shape of each value is
+            # validated in the resource patch that uses it.
+            - type: ToCompositeFieldPath
+              fromFieldPath: tenantId
+              toFieldPath: metadata.annotations[platform.a5n.io/env-check]
+              policy:
+                fromFieldPath: Required
+            - type: ToCompositeFieldPath
+              fromFieldPath: billingScopeId
+              toFieldPath: metadata.annotations[platform.a5n.io/env-check]
+              policy:
+                fromFieldPath: Required
+            - type: ToCompositeFieldPath
+              fromFieldPath: managementGroupId
+              toFieldPath: metadata.annotations[platform.a5n.io/env-check]
+              policy:
+                fromFieldPath: Required
+            - type: ToCompositeFieldPath
+              fromFieldPath: identitySubscriptionId
+              toFieldPath: metadata.annotations[platform.a5n.io/env-check]
+              policy:
+                fromFieldPath: Required
+            - type: ToCompositeFieldPath
+              fromFieldPath: identityResourceGroupName
+              toFieldPath: metadata.annotations[platform.a5n.io/env-check]
+              policy:
+                fromFieldPath: Required
+            - type: ToCompositeFieldPath
+              fromFieldPath: location
+              toFieldPath: metadata.annotations[platform.a5n.io/env-check]
+              policy:
+                fromFieldPath: Required
+            - type: ToCompositeFieldPath
+              fromFieldPath: oidcIssuerUrl
+              toFieldPath: metadata.annotations[platform.a5n.io/env-check]
+              policy:
+                fromFieldPath: Required
+            - type: ToCompositeFieldPath
+              fromFieldPath: providerServiceAccountSubject
+              toFieldPath: metadata.annotations[platform.a5n.io/env-check]
+              policy:
+                fromFieldPath: Required
+            - type: ToCompositeFieldPath
+              fromFieldPath: subscriptionRoleDefinitionId
+              toFieldPath: metadata.annotations[platform.a5n.io/env-check]
+              policy:
+                fromFieldPath: Required
+        patchSets:
+          - name: platform-tags
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.tags
+                toFieldPath: spec.forProvider.tags
+                policy:
+                  fromFieldPath: Optional
+              # Distinct keys from the allowlisted user keys, so tenants can't override them.
+              # Azure tag keys can't contain '/'.
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.namespace
+                toFieldPath: spec.forProvider.tags[a5n-namespace]
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.forProvider.tags[a5n-owner-xr]
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.uid
+                toFieldPath: spec.forProvider.tags[a5n-xr-uid]
+                policy:
+                  fromFieldPath: Required
+
+        resources:
+          # 1. The subscription itself. Orphan: no Delete in managementPolicies, so deleting
+          # the XR never cancels the subscription. No alias field exists on the v2.8.0 MR.
+          - name: subscription
+            base:
+              apiVersion: azure.m.upbound.io/v1beta1
+              kind: Subscription
+              spec:
+                managementPolicies: [Create, Observe, Update, LateInitialize]
+                providerConfigRef:
+                  kind: ClusterProviderConfig
+                  name: platform-vending
+                forProvider:
+                  workload: Production
+            patches:
+              - type: PatchSet
+                patchSetName: platform-tags
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: billingScopeId
+                toFieldPath: spec.forProvider.billingScopeId
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      type: Regexp
+                      regexp:
+                        match: '^/providers/Microsoft\.Billing/[^<>\s]+$'
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: displayName
+                toFieldPath: spec.forProvider.subscriptionName
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.workload
+                toFieldPath: spec.forProvider.workload
+                policy:
+                  fromFieldPath: Optional
+
+          # 2. Place the subscription in the vending management group (the Subscription MR
+          # has no management group field). Orphan like the subscription.
+          - name: management-group-association
+            base:
+              apiVersion: management.azure.m.upbound.io/v1beta1
+              kind: ManagementGroupSubscriptionAssociation
+              spec:
+                managementPolicies: [Create, Observe, Update, LateInitialize]
+                providerConfigRef:
+                  kind: ClusterProviderConfig
+                  name: platform-vending
+            patches:
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: managementGroupId
+                toFieldPath: spec.forProvider.managementGroupId
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      type: Regexp
+                      regexp:
+                        match: '^/providers/Microsoft\.Management/managementGroups/[^<>\s/]+$'
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.subscriptionId
+                toFieldPath: spec.forProvider.subscriptionId
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "/subscriptions/%s"
+
+          # 3. The identity that will act in the subscription. Created in the central
+          # identity subscription (set by platform-identity-admin) and resource group. It
+          # gets no role other than the Contributor assignment below.
+          - name: identity
+            base:
+              apiVersion: managedidentity.azure.m.upbound.io/v1beta1
+              kind: UserAssignedIdentity
+              spec:
+                providerConfigRef:
+                  kind: ClusterProviderConfig
+                  name: platform-identity-admin
+            patches:
+              - type: PatchSet
+                patchSetName: platform-tags
+              - type: CombineFromEnvironment
+                combine:
+                  variables:
+                    - fromFieldPath: displayName
+                    - fromFieldPath: nameHash
+                  strategy: string
+                  string:
+                    fmt: "%s-%s"
+                toFieldPath: spec.forProvider.name
+                policy:
+                  fromFieldPath: Required
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: location
+                toFieldPath: spec.forProvider.location
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      type: Regexp
+                      regexp:
+                        match: '^[a-z0-9]+$'
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: identityResourceGroupName
+                toFieldPath: spec.forProvider.resourceGroupName
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      type: Regexp
+                      regexp:
+                        match: '^[A-Za-z0-9._()-]+$'
+              # Validates that the identity subscription is configured (it is selected by
+              # the ClusterProviderConfig; the MR has no subscription field).
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: identitySubscriptionId
+                toFieldPath: metadata.annotations[platform.a5n.io/identity-subscription]
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      type: Regexp
+                      regexp:
+                        match: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.id
+                toFieldPath: status.identity.resourceId
+                policy:
+                  fromFieldPath: Optional
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.clientId
+                toFieldPath: status.identity.clientId
+                policy:
+                  fromFieldPath: Optional
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.principalId
+                toFieldPath: status.identity.principalId
+                policy:
+                  fromFieldPath: Optional
+
+          # 4. Trust: exactly one credential, one subject (the shared provider tier), fixed
+          # audience. Created once the identity's resource ID is pinned.
+          - name: federated-credential
+            base:
+              apiVersion: managedidentity.azure.m.upbound.io/v1beta1
+              kind: FederatedIdentityCredential
+              metadata:
+                annotations:
+                  crossplane.io/external-name: crossplane-provider
+              spec:
+                providerConfigRef:
+                  kind: ClusterProviderConfig
+                  name: platform-identity-admin
+                forProvider:
+                  audience:
+                    - api://AzureADTokenExchange
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.identity.resourceId
+                toFieldPath: spec.forProvider.parentId
+                policy:
+                  fromFieldPath: Required
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: oidcIssuerUrl
+                toFieldPath: spec.forProvider.issuer
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      type: Regexp
+                      regexp:
+                        match: '^https://[^<>\s*]+$'
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: providerServiceAccountSubject
+                toFieldPath: spec.forProvider.subject
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      type: Regexp
+                      regexp:
+                        match: '^system:serviceaccount:[a-z0-9-]+:[a-z0-9-]+$'
+
+          # 5. Contributor at the new subscription scope only (accepted exception E1). The
+          # role definition must be the one named in the ABAC condition of identity-admin
+          # (docs/identity-bootstrap.md). The assignment name is left to the provider (it
+          # generates a UUID); P&T cannot compute the UUIDv5 the plan proposed.
+          - name: role-assignment
+            base:
+              apiVersion: authorization.azure.m.upbound.io/v1beta1
+              kind: RoleAssignment
+              spec:
+                providerConfigRef:
+                  kind: ClusterProviderConfig
+                  name: platform-identity-admin
+                forProvider:
+                  principalType: ServicePrincipal
+                  skipServicePrincipalAadCheck: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.identity.principalId
+                toFieldPath: spec.forProvider.principalId
+                policy:
+                  fromFieldPath: Required
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: subscriptionVerified
+                toFieldPath: spec.forProvider.scope
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "/subscriptions/%s"
+              - type: CombineFromEnvironment
+                combine:
+                  variables:
+                    - fromFieldPath: subscriptionVerified
+                    - fromFieldPath: subscriptionRoleDefinitionId
+                  strategy: string
+                  string:
+                    fmt: "/subscriptions/%s/providers/Microsoft.Authorization/roleDefinitions/%s"
+                toFieldPath: spec.forProvider.roleDefinitionId
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      type: Regexp
+                      regexp:
+                        match: '^/subscriptions/[0-9a-fA-F-]{36}/providers/Microsoft\.Authorization/roleDefinitions/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+
+          # 6. The ProviderConfig that acts in the new subscription as the UAMI. Created
+          # once the client ID and subscription ID are pinned. A ProviderConfig has no
+          # Ready condition, so it counts as ready once it exists (spec.clientID is
+          # non-empty on the observed object); the XR becomes Ready only then.
+          - name: provider-config
+            base:
+              apiVersion: azure.m.upbound.io/v1beta1
+              kind: ProviderConfig
+              spec:
+                credentials:
+                  source: OIDCTokenFile
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+                policy:
+                  fromFieldPath: Required
+                # Defense in depth for the XRD rule: never create a ProviderConfig named
+                # "default" (RE2 has no lookahead, hence the long form).
+                transforms:
+                  - type: string
+                    string:
+                      type: Regexp
+                      regexp:
+                        match: '^(?:[^d][a-z0-9-]*|d|d[^e][a-z0-9-]*|de|de[^f][a-z0-9-]*|def|def[^a][a-z0-9-]*|defa|defa[^u][a-z0-9-]*|defau|defau[^l][a-z0-9-]*|defaul|defaul[^t][a-z0-9-]*|default[a-z0-9-]+)$'
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.identity.clientId
+                toFieldPath: spec.clientID
+                policy:
+                  fromFieldPath: Required
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: subscriptionVerified
+                toFieldPath: spec.subscriptionID
+                policy:
+                  fromFieldPath: Required
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: tenantId
+                toFieldPath: spec.tenantID
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      type: Regexp
+                      regexp:
+                        match: '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+              - type: ToCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: status.providerConfigName
+            readinessChecks:
+              - type: NonEmpty
+                fieldPath: spec.clientID
+
+          # Deletion order inside this XR: the credential and the role assignment go
+          # before the identity they depend on. (Building blocks that use this
+          # Subscription guard it with their own Usage; they arrive in later PRs.)
+          - name: usage-identity-by-federated-credential
+            base:
+              apiVersion: protection.crossplane.io/v1beta1
+              kind: Usage
+              spec:
+                of:
+                  apiVersion: managedidentity.azure.m.upbound.io/v1beta1
+                  kind: UserAssignedIdentity
+                  resourceSelector:
+                    matchControllerRef: true
+                by:
+                  apiVersion: managedidentity.azure.m.upbound.io/v1beta1
+                  kind: FederatedIdentityCredential
+                  resourceSelector:
+                    matchControllerRef: true
+            readinessChecks:
+              - type: None
+
+          - name: usage-identity-by-role-assignment
+            base:
+              apiVersion: protection.crossplane.io/v1beta1
+              kind: Usage
+              spec:
+                of:
+                  apiVersion: managedidentity.azure.m.upbound.io/v1beta1
+                  kind: UserAssignedIdentity
+                  resourceSelector:
+                    matchControllerRef: true
+                by:
+                  apiVersion: authorization.azure.m.upbound.io/v1beta1
+                  kind: RoleAssignment
+                  resourceSelector:
+                    matchControllerRef: true
+            readinessChecks:
+              - type: None
+
+    - step: automatically-detect-readiness
+      functionRef:
+        name: function-auto-ready

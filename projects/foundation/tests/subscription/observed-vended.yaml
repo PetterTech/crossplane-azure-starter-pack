@@ -1,0 +1,37 @@
+apiVersion: azure.m.upbound.io/v1beta1
+kind: Subscription
+metadata:
+  name: pettertech-sandbox-sub
+  namespace: pettertech-sandbox
+  annotations:
+    crossplane.io/composition-resource-name: subscription
+spec:
+  forProvider: {}
+status:
+  atProvider:
+    subscriptionId: eeeeeeee-1111-2222-3333-ffffffffffff
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: Available
+      lastTransitionTime: "2024-01-01T00:00:00Z"
+---
+apiVersion: managedidentity.azure.m.upbound.io/v1beta1
+kind: UserAssignedIdentity
+metadata:
+  name: pettertech-sandbox-id
+  namespace: pettertech-sandbox
+  annotations:
+    crossplane.io/composition-resource-name: identity
+spec:
+  forProvider: {}
+status:
+  atProvider:
+    id: /subscriptions/cccccccc-1111-2222-3333-dddddddddddd/resourceGroups/rg-test-identities/providers/Microsoft.ManagedIdentity/userAssignedIdentities/pettertech-sandbox-pettertech-sandbox-8153f471
+    clientId: 11111111-aaaa-bbbb-cccc-222222222222
+    principalId: 33333333-aaaa-bbbb-cccc-444444444444
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: Available
+      lastTransitionTime: "2024-01-01T00:00:00Z"

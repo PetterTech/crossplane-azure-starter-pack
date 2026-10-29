@@ -6,3 +6,28 @@ These are documented prerequisites, not shipped RBAC. Apply them in the cluster 
 - In `crossplane-system`, only platform principals can create or update pods, use `pods/exec`, create `serviceaccounts/token`, or read secrets. Anyone with these can obtain a provider pod token and act as every identity that trusts its ServiceAccount (see `docs/identity-bootstrap.md`).
 - Tenants cannot create namespaces.
 - Tenants never reference `ClusterProviderConfig` objects; compositions always set the provider config reference explicitly, and there is no `default` ClusterProviderConfig.
+
+## Vended subscription baseline
+
+Subscriptions created by the `Subscription` API (`docs/apis/subscription.md`) are only as safe as the management group they land in. These are prerequisites, not shipped policy.
+
+**Tags.** The `a5n-` prefix is reserved for the platform. `owner` is the tenant's accountable contact and is not trusted for automation.
+
+**D1 Owner model.** Give each subscription 2-3 owners, as a PIM-eligible group. The platform identity-admin identity holds Contributor only: it holds no Owner and cannot assign roles beyond that grant.
+
+**D2 Default management group.** Lock down the default management group with the policy baseline below, so a subscription that is not yet moved is still covered.
+
+**D3 Delete protection.** Deliberately not in the XRs. Deleting a Subscription XR orphans the Azure subscription, and a platform operator cancels it. A subscription-scope lock needs a Drizzt-approved decision first.
+
+**D4 DevTest vs Production.** `spec.workload` is immutable. Choose `Production` unless the work is non-production.
+
+**D5 Management-group prerequisites.** Assign these at the target management group:
+
+- Defender plans, deployed with DeployIfNotExists;
+- activity log export;
+- security contact;
+- the Microsoft cloud security benchmark (MCSB) assignment;
+- allowed locations;
+- a tag policy for `costCenter` and `owner`.
+
+After the first sandbox subscription is vended, check that the Defender plans are on.

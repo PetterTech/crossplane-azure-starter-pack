@@ -26,6 +26,18 @@ spec:
     - type: xpkg
       xpkg:
         apiVersion: pkg.crossplane.io/v1
+        kind: Provider
+        package: xpkg.upbound.io/upbound/provider-azure-managedidentity
+        version: v2.8.0
+    - type: xpkg
+      xpkg:
+        apiVersion: pkg.crossplane.io/v1
+        kind: Provider
+        package: xpkg.upbound.io/upbound/provider-azure-authorization
+        version: v2.8.0
+    - type: xpkg
+      xpkg:
+        apiVersion: pkg.crossplane.io/v1
         kind: Function
         package: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform
         version: v0.11.2

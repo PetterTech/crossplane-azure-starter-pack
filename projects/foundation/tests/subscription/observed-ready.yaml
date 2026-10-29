@@ -1,0 +1,101 @@
+# Everything observed and Ready, including the ProviderConfig. Used with xr-pinned.yaml.
+apiVersion: azure.m.upbound.io/v1beta1
+kind: Subscription
+metadata:
+  name: pettertech-sandbox-sub
+  namespace: pettertech-sandbox
+  annotations:
+    crossplane.io/composition-resource-name: subscription
+spec:
+  forProvider: {}
+status:
+  atProvider:
+    subscriptionId: eeeeeeee-1111-2222-3333-ffffffffffff
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: managedidentity.azure.m.upbound.io/v1beta1
+kind: UserAssignedIdentity
+metadata:
+  name: pettertech-sandbox-id
+  namespace: pettertech-sandbox
+  annotations:
+    crossplane.io/composition-resource-name: identity
+spec:
+  forProvider: {}
+status:
+  atProvider:
+    id: /subscriptions/cccccccc-1111-2222-3333-dddddddddddd/resourceGroups/rg-test-identities/providers/Microsoft.ManagedIdentity/userAssignedIdentities/pettertech-sandbox-pettertech-sandbox-8153f471
+    clientId: 11111111-aaaa-bbbb-cccc-222222222222
+    principalId: 33333333-aaaa-bbbb-cccc-444444444444
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: management.azure.m.upbound.io/v1beta1
+kind: ManagementGroupSubscriptionAssociation
+metadata:
+  name: pettertech-sandbox-mga
+  namespace: pettertech-sandbox
+  annotations:
+    crossplane.io/composition-resource-name: management-group-association
+spec:
+  forProvider: {}
+status:
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: managedidentity.azure.m.upbound.io/v1beta1
+kind: FederatedIdentityCredential
+metadata:
+  name: pettertech-sandbox-fic
+  namespace: pettertech-sandbox
+  annotations:
+    crossplane.io/composition-resource-name: federated-credential
+spec:
+  forProvider: {}
+status:
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: authorization.azure.m.upbound.io/v1beta1
+kind: RoleAssignment
+metadata:
+  name: pettertech-sandbox-ra
+  namespace: pettertech-sandbox
+  annotations:
+    crossplane.io/composition-resource-name: role-assignment
+spec:
+  forProvider: {}
+status:
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: pettertech-sandbox
+  namespace: pettertech-sandbox
+  annotations:
+    crossplane.io/composition-resource-name: provider-config
+spec:
+  clientID: 11111111-aaaa-bbbb-cccc-222222222222
+  credentials:
+    source: OIDCTokenFile
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: pettertech-sandbox-usage-fic
+  namespace: pettertech-sandbox
+  annotations:
+    crossplane.io/composition-resource-name: usage-identity-by-federated-credential
+spec: {}
+---
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: pettertech-sandbox-usage-ra
+  namespace: pettertech-sandbox
+  annotations:
+    crossplane.io/composition-resource-name: usage-identity-by-role-assignment
+spec: {}

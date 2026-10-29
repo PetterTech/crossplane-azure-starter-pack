@@ -76,6 +76,17 @@ spec:
                     create a new resource.
                   maxLength: 63
                   pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                deletionPolicy:
+                  type: string
+                  description: >-
+                    What happens in Azure when this resource is deleted. Orphan (default): the storage
+                    account and its containers stay in Azure with all their data, and only the Kubernetes
+                    objects and the private endpoint are removed. Delete: the account and its containers are
+                    deleted in Azure (recoverable only through the soft delete of the account's data).
+                    A new resource with the same name in the same namespace and Subscription derives the
+                    same account name and adopts an orphaned account unless parameters.name is set.
+                  enum: [Delete, Orphan]
+                  default: Orphan
                 parameters:
                   type: object
                   description: Settings of the storage account.
@@ -138,6 +149,9 @@ spec:
                         type: string
                         maxLength: 18
                         pattern: "^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}(/(3[0-2]|[12]?[0-9]))?$"
+                        x-kubernetes-validations:
+                          - rule: "!self.contains('/') || int(self.split('/')[1]) >= 16"
+                            message: "allowedIpRanges prefixes must be /16 or narrower."
                       x-kubernetes-list-type: set
                     replication:
                       type: string
@@ -176,13 +190,15 @@ spec:
                       x-kubernetes-list-map-keys: [name]
                     softDeleteDays:
                       type: integer
-                      description: Days deleted blobs and containers can be recovered. 0 turns soft delete off.
-                      minimum: 0
+                      description: Days deleted blobs and containers can be recovered. At least 1; soft delete can't be turned off.
+                      minimum: 1
                       maximum: 365
                       default: 7
                     versioning:
                       type: boolean
-                      description: Whether blob versioning is on.
+                      description: >-
+                        Whether blob versioning is on. Setting false is the caller's opt-out and is likely to
+                        raise Defender for Cloud and backup-resilience findings.
                       default: true
                     tags:
                       type: object
@@ -201,7 +217,7 @@ spec:
               type: object
               description: >-
                 Observed state, written by the platform. The pinned values (subscription, subscriptionUid,
-                subscriptionId and environment) are written once and can't be changed or removed afterwards,
+                subscriptionId, environment and accountName) are written once and can't be changed or removed afterwards,
                 even by administrators; a tampered resource is recovered by deleting it. Conditions
                 (Ready, Synced, SubscriptionResolved, EnvironmentValid, EnvironmentDrift) are managed by the
                 platform and Crossplane and are not declared here. Tenants have no write access to status.
@@ -212,6 +228,8 @@ spec:
                   message: "status.subscriptionUid is write-once."
                 - rule: "!has(oldSelf.subscriptionId) || (has(self.subscriptionId) && self.subscriptionId == oldSelf.subscriptionId)"
                   message: "status.subscriptionId is write-once."
+                - rule: "!has(oldSelf.accountName) || (has(self.accountName) && self.accountName == oldSelf.accountName)"
+                  message: "status.accountName is write-once."
                 - rule: "!has(oldSelf.environment) || (has(self.environment) && self.environment == oldSelf.environment)"
                   message: "status.environment is write-once."
               properties:
@@ -244,7 +262,7 @@ spec:
                         private endpoint is composed from this value when networking is private.
                 accountName:
                   type: string
-                  description: Name of the storage account in Azure.
+                  description: Name of the storage account in Azure, recorded once and never changed afterwards.
                 resourceId:
                   type: string
                   description: Azure resource ID of the storage account.

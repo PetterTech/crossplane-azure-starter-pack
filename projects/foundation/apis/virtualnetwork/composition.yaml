@@ -291,9 +291,8 @@ spec:
             {{- $envOK := true -}}
             {{- $envReason := "EnvironmentValid" -}}
             {{- $subnet := "" -}}
-            {{- $hold := false -}}
             {{- if eq $kind "StorageAccount" -}}
-              {{- /* The private endpoint subnet. A missing, placeholder or malformed subnetId with networking private pins nothing (the whole status.environment is withheld), so nothing is composed until the platform fixes it. */ -}}
+              {{- /* The private endpoint subnet. With networking private, an unpinned storage account and a missing, placeholder or malformed subnetId is Fatal (nothing is composed or pinned, Ready is not reported). A pinned one keeps its pin and reports EnvironmentValid=False. */ -}}
               {{- $private := eq (get $params "networking" | default "private") "private" -}}
               {{- $liveSubnet := get $env "subnetId" | default "" -}}
               {{- if not (regexMatch `(?i)^/subscriptions/[^/]+/resourcegroups/[^/]+/providers/microsoft\.network/virtualnetworks/[^/]+/subnets/[^/]+$` $liveSubnet) }}{{ $liveSubnet = "" }}{{ end -}}
@@ -304,10 +303,10 @@ spec:
                 {{- $subnet = $liveSubnet -}}
               {{- end -}}
               {{- if and $private (not $subnet) -}}
+                {{- if not $pinned }}{{ fail "SubnetNotConfigured: networking is private but the platform-environment EnvironmentConfig has no valid subnetId (missing, a placeholder or malformed). Nothing is created or pinned until the platform sets it." }}{{ end -}}
                 {{- $envOK = false -}}
                 {{- $envReason = "SubnetNotConfigured" -}}
-                {{- $envMsg = ternary "networking is private but the platform had no valid subnetId configured when this storage account was created. The private endpoint is not created; recreate the storage account after the platform sets subnetId." "networking is private but the platform-environment EnvironmentConfig has no valid subnetId (missing, a placeholder or malformed). Nothing is created until it is set." $pinned -}}
-                {{- if not $pinned }}{{ $hold = true }}{{ end -}}
+                {{- $envMsg = "networking is private but the platform had no valid subnetId configured when this storage account was created. The private endpoint is not created; recreate the storage account after the platform sets subnetId." -}}
               {{- end -}}
             {{- end -}}
             {{- if eq $kind "VirtualNetwork" -}}
@@ -338,7 +337,6 @@ spec:
               subscription: {{ $chosen.metadata.name | quote }}
               subscriptionUid: {{ $chosen.metadata.uid | quote }}
               subscriptionId: {{ $subID | quote }}
-            {{- if not $hold }}
               environment:
                 location: {{ $loc | quote }}
                 resourceGroupName: {{ $rg | quote }}
@@ -349,7 +347,6 @@ spec:
                 ipamPoolId: {{ $ipam | quote }}
             {{- if $hubOut }}
                 hubVirtualHubId: {{ $hubOut | quote }}
-            {{- end }}
             {{- end }}
             {{- end }}
             ---

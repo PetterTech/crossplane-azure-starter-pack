@@ -72,7 +72,11 @@ expect_ok "subscription pinned" st no-subnet '{"status":{"subscription":"sub-a",
 expect_reject "status.subscription is write-once" "write-once" st no-subnet '{"status":{"subscription":"sub-b"}}'
 expect_reject "status.subscriptionUid is write-once" "write-once" st no-subnet '{"status":{"subscriptionUid":"u2"}}'
 expect_reject "status.subscriptionId is write-once" "write-once" st no-subnet '{"status":{"subscriptionId":"s2"}}'
-expect_ok "observed outputs can change" st no-subnet '{"status":{"accountName":"a","resourceId":"b","privateEndpointId":"c"}}'
+expect_ok "accountName pinned" st no-subnet '{"status":{"accountName":"stfixedname0000000000001"}}'
+expect_ok "the same accountName is re-applied" st no-subnet '{"status":{"accountName":"stfixedname0000000000001"}}'
+expect_reject "status.accountName is write-once" "write-once" st no-subnet '{"status":{"accountName":"stother"}}'
+expect_reject "status.accountName can't be removed" "write-once" st no-subnet '{"status":{"accountName":null}}'
+expect_ok "observed outputs can change" st no-subnet '{"status":{"resourceId":"b","privateEndpointId":"c"}}'
 
 mk imm '{"name":"stfixedname01","location":"westeurope","resourceGroupName":"rg"}'
 imm() { k -n t patch storageaccount imm --type merge -p "$1"; }
@@ -95,6 +99,15 @@ expect_reject "BlockBlobStorage with Standard" "" dry '{"accountKind":"BlockBlob
 expect_reject "containers on FileStorage" "FileStorage" dry '{"accountKind":"FileStorage","accountTier":"Premium","containers":[{"name":"a"}]}'
 expect_reject "allowedIpRanges with private" "" dry '{"networking":"private","allowedIpRanges":["203.0.113.0/24"]}'
 expect_reject "a 25 character name" "" dry '{"name":"abcdefghijklmnopqrstuvwxy"}'
+for n in 0 8 15; do
+  expect_reject "allowedIpRanges prefix /$n" "/16 or narrower" dry "{\"networking\":\"public\",\"allowedIpRanges\":[\"203.0.113.0/$n\"]}"
+done
+expect_ok "allowedIpRanges prefix /16" dry '{"networking":"public","allowedIpRanges":["203.0.0.0/16"]}'
+expect_reject "softDeleteDays 0" "" dry '{"softDeleteDays":0}'
+expect_ok "softDeleteDays 1" dry '{"softDeleteDays":1}'
+expect_ok "deletionPolicy defaults to Orphan" bash -c "[ \"\$(kubectl --context $CTX -n t get storageaccount with-subnet -o jsonpath='{.spec.deletionPolicy}')\" = Orphan ]"
+expect_reject "deletionPolicy Retain" "Unsupported value" k -n t patch storageaccount imm --type merge -p '{"spec":{"deletionPolicy":"Retain"}}'
+expect_ok "deletionPolicy Delete" k -n t patch storageaccount imm --type merge -p '{"spec":{"deletionPolicy":"Delete"}}'
 expect_ok "a 24 character name" dry '{"name":"abcdefghijklmnopqrstuvwx"}'
 expect_ok "public with allowedIpRanges" dry '{"networking":"public","allowedIpRanges":["203.0.113.0/24"]}'
 echo "all kind CEL tests passed"

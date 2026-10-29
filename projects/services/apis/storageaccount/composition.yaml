@@ -78,8 +78,9 @@ spec:
               kind: Account
               metadata:
                 annotations:
-                  crossplane.io/external-name: '${has(schema.spec.parameters.name) ? schema.spec.parameters.name : "st" + random.seededString(8, schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/1") + random.seededString(8, schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/2") + random.seededString(6, schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/3")}'
+                  crossplane.io/external-name: '${schema.spec.parameters.?name.orValue(xr.status.?accountName.orValue("st" + random.seededString(8, schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/1") + random.seededString(8, schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/2") + random.seededString(6, schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/3")))}'
               spec:
+                managementPolicies: '${schema.spec.deletionPolicy == "Delete" ? ["*"] : ["Create", "Observe", "Update", "LateInitialize"]}'
                 providerConfigRef:
                   kind: ProviderConfig
                   name: '${xr.status.subscription}'
@@ -104,7 +105,7 @@ spec:
                     defaultAction: Deny
                     bypass: []
                     ipRules: '${schema.spec.parameters.networking == "public" ? schema.spec.parameters.?allowedIpRanges.orValue([]) : []}'
-                  blobProperties: '${schema.spec.parameters.accountKind == "FileStorage" ? {} : {"versioningEnabled": schema.spec.parameters.versioning, "deleteRetentionPolicy": schema.spec.parameters.softDeleteDays > 0 ? [{"days": schema.spec.parameters.softDeleteDays}] : [], "containerDeleteRetentionPolicy": schema.spec.parameters.softDeleteDays > 0 ? [{"days": schema.spec.parameters.softDeleteDays}] : []}}'
+                  blobProperties: '${schema.spec.parameters.accountKind == "FileStorage" ? {} : {"versioningEnabled": schema.spec.parameters.versioning, "deleteRetentionPolicy": {"days": schema.spec.parameters.softDeleteDays}, "containerDeleteRetentionPolicy": {"days": schema.spec.parameters.softDeleteDays}}}'
                   tags: '${{"a5n-namespace": schema.metadata.namespace, "a5n-owner-xr": schema.metadata.name, "a5n-xr-uid": schema.metadata.uid, ?"costCenter": schema.spec.parameters.?tags.costCenter, ?"owner": schema.spec.parameters.?tags.owner, ?"environment": schema.spec.parameters.?tags.environment}}'
 
           # Blob containers are always private. They use the ARM storageAccountId so they work
@@ -122,6 +123,7 @@ spec:
                 annotations:
                   crossplane.io/external-name: '${container.name}'
               spec:
+                managementPolicies: '${schema.spec.deletionPolicy == "Delete" ? ["*"] : ["Create", "Observe", "Update", "LateInitialize"]}'
                 providerConfigRef:
                   kind: ProviderConfig
                   name: '${xr.status.subscription}'
@@ -278,9 +280,8 @@ spec:
             {{- $envOK := true -}}
             {{- $envReason := "EnvironmentValid" -}}
             {{- $subnet := "" -}}
-            {{- $hold := false -}}
             {{- if eq $kind "StorageAccount" -}}
-              {{- /* The private endpoint subnet. A missing, placeholder or malformed subnetId with networking private pins nothing (the whole status.environment is withheld), so nothing is composed until the platform fixes it. */ -}}
+              {{- /* The private endpoint subnet. With networking private, an unpinned storage account and a missing, placeholder or malformed subnetId is Fatal (nothing is composed or pinned, Ready is not reported). A pinned one keeps its pin and reports EnvironmentValid=False. */ -}}
               {{- $private := eq (get $params "networking" | default "private") "private" -}}
               {{- $liveSubnet := get $env "subnetId" | default "" -}}
               {{- if not (regexMatch `(?i)^/subscriptions/[^/]+/resourcegroups/[^/]+/providers/microsoft\.network/virtualnetworks/[^/]+/subnets/[^/]+$` $liveSubnet) }}{{ $liveSubnet = "" }}{{ end -}}
@@ -291,10 +292,10 @@ spec:
                 {{- $subnet = $liveSubnet -}}
               {{- end -}}
               {{- if and $private (not $subnet) -}}
+                {{- if not $pinned }}{{ fail "SubnetNotConfigured: networking is private but the platform-environment EnvironmentConfig has no valid subnetId (missing, a placeholder or malformed). Nothing is created or pinned until the platform sets it." }}{{ end -}}
                 {{- $envOK = false -}}
                 {{- $envReason = "SubnetNotConfigured" -}}
-                {{- $envMsg = ternary "networking is private but the platform had no valid subnetId configured when this storage account was created. The private endpoint is not created; recreate the storage account after the platform sets subnetId." "networking is private but the platform-environment EnvironmentConfig has no valid subnetId (missing, a placeholder or malformed). Nothing is created until it is set." $pinned -}}
-                {{- if not $pinned }}{{ $hold = true }}{{ end -}}
+                {{- $envMsg = "networking is private but the platform had no valid subnetId configured when this storage account was created. The private endpoint is not created; recreate the storage account after the platform sets subnetId." -}}
               {{- end -}}
             {{- end -}}
             {{- if eq $kind "VirtualNetwork" -}}
@@ -325,7 +326,6 @@ spec:
               subscription: {{ $chosen.metadata.name | quote }}
               subscriptionUid: {{ $chosen.metadata.uid | quote }}
               subscriptionId: {{ $subID | quote }}
-            {{- if not $hold }}
               environment:
                 location: {{ $loc | quote }}
                 resourceGroupName: {{ $rg | quote }}
@@ -336,7 +336,6 @@ spec:
                 ipamPoolId: {{ $ipam | quote }}
             {{- if $hubOut }}
                 hubVirtualHubId: {{ $hubOut | quote }}
-            {{- end }}
             {{- end }}
             {{- end }}
             ---

@@ -6,6 +6,7 @@ metadata:
   namespace: team-a
   uid: 7a1b2c3d-0000-4000-8000-000000000002
 spec:
+  deletionPolicy: Orphan
   parameters:
     networking: private
     replication: ZRS

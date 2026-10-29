@@ -111,8 +111,9 @@ check "reconcile 2: only the account (containers and endpoint wait for its ID); 
     "localUserEnabled" => false, "publicNetworkAccessEnabled" => false }
   abort hardened.reject { |k, v| f[k] == v }.inspect unless hardened.all? { |k, v| f[k] == v }
   abort f["networkRules"].inspect unless f["networkRules"] == { "defaultAction" => "Deny", "bypass" => [], "ipRules" => [] }
-  abort f["blobProperties"].inspect unless f["blobProperties"] == { "versioningEnabled" => true, "deleteRetentionPolicy" => [{ "days" => 7 }], "containerDeleteRetentionPolicy" => [{ "days" => 7 }] }
+  abort f["blobProperties"].inspect unless f["blobProperties"] == { "versioningEnabled" => true, "deleteRetentionPolicy" => { "days" => 7 }, "containerDeleteRetentionPolicy" => { "days" => 7 } }
   abort a["spec"]["providerConfigRef"].inspect unless a["spec"]["providerConfigRef"] == { "kind" => "ProviderConfig", "name" => "sub-a" }
+  abort a["spec"]["managementPolicies"].inspect unless a["spec"]["managementPolicies"] == %w[Create Observe Update LateInitialize]
   n = a["metadata"]["annotations"]["crossplane.io/external-name"]
   abort n unless n =~ /\A[a-z0-9]{3,24}\z/ && n.size == 24 && n.start_with?("st")
   abort f["tags"].inspect unless f["tags"] == { "a5n-namespace" => "team-a", "a5n-owner-xr" => "data", "a5n-xr-uid" => "7a1b2c3d-0000-4000-8000-000000000002", "costCenter" => "0000", "owner" => "platform-team@example.com", "environment" => "sandbox" }
@@ -127,6 +128,28 @@ ruby -ryaml -e '
   n = ARGV.map { |f| YAML.load_stream(File.read(f)).find { |d| d["kind"] == "Account" }["metadata"]["annotations"]["crossplane.io/external-name"] }
   abort n.inspect unless n[0] == n[1] && n[0] != n[2] && n.all? { |x| x =~ /\Ast[a-z0-9]{22}\z/ }' "$WORK/name1.yaml" "$WORK/name2.yaml" "$WORK/name3.yaml" && echo "PASS derived account name: deterministic, 24 chars lowercase alphanumeric, differs per Subscription"
 
+# the derived name also depends on the XR name (the same name in the same namespace and Subscription derives the same account: adoption by name)
+edit $T/xr-pinned.yaml "$WORK/xr-other-name.yaml" 'd["metadata"]["name"] = "other"'
+render "$WORK/xr-other-name.yaml" >"$WORK/name4.yaml"
+ruby -ryaml -e '
+  n = ARGV.map { |f| YAML.load_stream(File.read(f)).find { |d| d["kind"] == "Account" }["metadata"]["annotations"]["crossplane.io/external-name"] }
+  abort n.inspect unless n[0] != n[1] && n.all? { |x| x =~ /\Ast[a-z0-9]{22}\z/ }' "$WORK/name1.yaml" "$WORK/name4.yaml" && echo "PASS derived account name differs per XR name"
+
+# a pinned status.accountName wins over the derived name; spec.parameters.name wins over both
+edit $T/xr-pinned.yaml "$WORK/xr-name-pinned.yaml" 'd["status"]["accountName"] = "stpinnedname0000000001"'
+check "pinned status.accountName wins over the derived name" "$WORK/xr-name-pinned.yaml" "" '
+  abort res["account"]["metadata"]["annotations"].inspect unless res["account"]["metadata"]["annotations"]["crossplane.io/external-name"] == "stpinnedname0000000001"'
+edit "$WORK/xr-name-pinned.yaml" "$WORK/xr-name-both.yaml" 'd["spec"]["parameters"]["name"] = "mydataaccount01"'
+check "spec.parameters.name wins over a pinned status.accountName" "$WORK/xr-name-both.yaml" "" '
+  abort res["account"]["metadata"]["annotations"].inspect unless res["account"]["metadata"]["annotations"]["crossplane.io/external-name"] == "mydataaccount01"'
+
+# deletionPolicy: Orphan leaves no Delete in managementPolicies (Account and containers), Delete is the default policy set
+edit $T/xr-pinned.yaml "$WORK/xr-delete.yaml" 'd["spec"]["deletionPolicy"] = "Delete"'
+check "deletionPolicy Delete: Account and containers manage everything, the endpoint has no policy override" "$WORK/xr-delete.yaml" observed-account.yaml '
+  abort res["account"]["spec"]["managementPolicies"].inspect unless res["account"]["spec"]["managementPolicies"] == ["*"]
+  cs = docs.select { |d| d["kind"] == "Container" }
+  abort cs.inspect unless cs.size == 2 && cs.all? { |c| c["spec"]["managementPolicies"] == ["*"] }'
+
 # --- reconcile 3: account Ready ------------------------------------------------------------
 check "reconcile 3: containers and private endpoint follow the account; status projected" $T/xr-pinned.yaml observed-account.yaml '
   abort kinds.inspect unless kinds == %w[Account Container Container PrivateEndpoint]
@@ -137,6 +160,7 @@ check "reconcile 3: containers and private endpoint follow the account; status p
   cs.each do |c|
     abort c.inspect unless c["spec"]["forProvider"] == { "storageAccountId" => st["resourceId"], "containerAccessType" => "private" } && c["spec"]["providerConfigRef"] == { "kind" => "ProviderConfig", "name" => "sub-a" }
     abort c["metadata"]["name"] unless c["metadata"]["name"] =~ /\Adata-(raw|curated)-[a-z0-9]{6}\z/
+    abort c["spec"]["managementPolicies"].inspect unless c["spec"]["managementPolicies"] == %w[Create Observe Update LateInitialize]
   end
   pe = res["privateEndpoint"]
   p = pe["spec"]["forProvider"]
@@ -154,6 +178,16 @@ check "reconcile 4: private endpoint id projected, XR Ready, one ProviderConfig,
   abort "no ManagementLock allowed" if kinds.include?("ManagementLock")
   abort docs.map { |d| d["spec"]["providerConfigRef"] }.uniq.inspect unless docs.all? { |d| d["spec"]["providerConfigRef"] == { "kind" => "ProviderConfig", "name" => "sub-a" } }
   abort "Ready=#{cond["Ready"].inspect}" unless cond["Ready"]["status"] == "True"'
+
+# the composed managed resources must validate against the provider CRDs (v2.8.0)
+render $T/xr-pinned.yaml observed-all.yaml >"$WORK/out-all.yaml"
+render $T/xr-pinned.yaml observed-account.yaml >"$WORK/out-3.yaml"
+render $T/xr-pinned.yaml >"$WORK/out-2.yaml"
+for f in out-2 out-3 out-all; do
+  ruby -ryaml -e 'puts YAML.load_stream(File.read(ARGV[0])).compact.select { |d| d["apiVersion"] =~ /azure\.m\.upbound\.io/ }.map(&:to_yaml).join' "$WORK/$f.yaml" >"$WORK/$f-mrs.yaml"
+  crossplane resource validate $T/crds "$WORK/$f-mrs.yaml" >/dev/null 2>"$WORK/validate.err" || { echo "FAIL $f: managed resources do not validate against the provider CRDs"; cat "$WORK/validate.err"; exit 1; }
+done
+echo "PASS composed Account, Container and PrivateEndpoint validate against the provider CRDs"
 
 # --- variants ------------------------------------------------------------------------------
 edit $T/xr-pinned.yaml "$WORK/xr-public.yaml" 'd["spec"]["parameters"]["networking"] = "public"; d["spec"]["parameters"]["allowedIpRanges"] = ["203.0.113.0/24", "198.51.100.7"]; d["status"]["environment"].delete("subnetId")'
@@ -175,13 +209,13 @@ check "public pinned (no subnetId) flipped to private: no endpoint, EnvironmentV
   abort cond["EnvironmentValid"].inspect unless cond["EnvironmentValid"]["status"] == "False" && cond["EnvironmentValid"]["reason"] == "SubnetNotConfigured"
   abort st["environment"].inspect if st["environment"].key?("subnetId")' "$T/env.yaml"
 
-edit $T/xr-pinned.yaml "$WORK/xr-explicit.yaml" 'p = d["spec"]["parameters"]; p["name"] = "mydataaccount01"; p["softDeleteDays"] = 0; p["versioning"] = false; p["accountTier"] = "Premium"; p["accountKind"] = "BlockBlobStorage"; p["replication"] = "LRS"; p.delete("tags")'
-check "explicit name, soft delete 0, no versioning, Premium BlockBlobStorage LRS, platform tags only" "$WORK/xr-explicit.yaml" "" '
+edit $T/xr-pinned.yaml "$WORK/xr-explicit.yaml" 'p = d["spec"]["parameters"]; p["name"] = "mydataaccount01"; p["softDeleteDays"] = 30; p["versioning"] = false; p["accountTier"] = "Premium"; p["accountKind"] = "BlockBlobStorage"; p["replication"] = "LRS"; p.delete("tags")'
+check "explicit name, soft delete 30, no versioning, Premium BlockBlobStorage LRS, platform tags only" "$WORK/xr-explicit.yaml" "" '
   a = res["account"]
   f = a["spec"]["forProvider"]
   abort a["metadata"]["annotations"].inspect unless a["metadata"]["annotations"]["crossplane.io/external-name"] == "mydataaccount01"
   abort f.inspect unless f.values_at("accountKind", "accountTier", "accountReplicationType") == %w[BlockBlobStorage Premium LRS]
-  abort f["blobProperties"].inspect unless f["blobProperties"] == { "versioningEnabled" => false, "deleteRetentionPolicy" => [], "containerDeleteRetentionPolicy" => [] }
+  abort f["blobProperties"].inspect unless f["blobProperties"] == { "versioningEnabled" => false, "deleteRetentionPolicy" => { "days" => 30 }, "containerDeleteRetentionPolicy" => { "days" => 30 } }
   abort f["tags"].keys.sort.inspect unless f["tags"].keys.sort == %w[a5n-namespace a5n-owner-xr a5n-xr-uid]'
 
 edit $T/xr-pinned.yaml "$WORK/xr-file.yaml" 'p = d["spec"]["parameters"]; p["accountTier"] = "Premium"; p["accountKind"] = "FileStorage"; p["replication"] = "ZRS"; p.delete("containers")'
@@ -194,19 +228,13 @@ edit $T/xr-pinned.yaml "$WORK/xr-nocontainers.yaml" 'd["spec"]["parameters"].del
 check "no containers: account and endpoint only" "$WORK/xr-nocontainers.yaml" observed-account.yaml '
   abort kinds.inspect unless kinds == %w[Account PrivateEndpoint]'
 
-# --- private without a usable subnetId: nothing is created --------------------------------
+# --- private without a usable subnetId: fail closed ---
 envedit env-placeholder.yaml 'd["data"]["subnetId"] = "<SUBNET_ID>"'
 envedit env-badsubnet.yaml 'd["data"]["subnetId"] = "not-a-subnet"'
 for e in env-nosubnet env-placeholder env-badsubnet; do
-  check "private, first reconcile, $e: nothing pinned or composed, EnvironmentValid=False SubnetNotConfigured" $T/xr.yaml "" '
-    abort kinds.inspect unless kinds.empty?
-    abort st.inspect if st.key?("environment")
-    abort st.inspect unless st["subscription"] == "sub-a"
-    abort cond["EnvironmentValid"].inspect unless cond["EnvironmentValid"]["status"] == "False" && cond["EnvironmentValid"]["reason"] == "SubnetNotConfigured"' "$WORK/$e.yaml"
+  must_fail "private, first reconcile, $e: Fatal SubnetNotConfigured, nothing pinned or composed, Ready not reported" SubnetNotConfigured $T/xr.yaml "" "$WORK/$e.yaml"
   edit $T/xr-pinned.yaml "$WORK/xr-held.yaml" 'd["status"].delete("environment")'
-  check "private, held ($e): still nothing composed on the next reconcile" "$WORK/xr-held.yaml" "" '
-    abort kinds.inspect unless kinds.empty?
-    abort st.inspect if st.key?("environment")' "$WORK/$e.yaml"
+  must_fail "private, no pinned environment ($e): still Fatal on the next reconcile" SubnetNotConfigured "$WORK/xr-held.yaml" "" "$WORK/$e.yaml"
 done
 
 check "subnetId removed from the environment later: a pinned account keeps its endpoint, drift reported" $T/xr-pinned.yaml observed-account.yaml '
@@ -271,6 +299,13 @@ validate_rejects "an invalid IP range" "pattern\|should match" "$P[\"networking\
 validate_rejects "more than 10 IP ranges" "maxItems\|should have at most\|Too many" "$P[\"networking\"] = \"public\"; $P[\"allowedIpRanges\"] = (1..11).map { |i| \"203.0.113.#{i}\" }"
 validate_rejects "an unknown networking value" "Unsupported value\|enum" "$P[\"networking\"] = \"internal\""
 validate_rejects "a tag key outside the allowlist" "Allowed tag keys" "$P[\"tags\"][\"a5n-xr-uid\"] = \"x\""
+for n in 0 1 8 15; do
+  validate_rejects "an allowedIpRanges prefix of /$n" "must be /16 or narrower" "$P[\"networking\"] = \"public\"; $P[\"allowedIpRanges\"] = [\"203.0.113.0/$n\"]"
+done
+validate_accepts "an allowedIpRanges prefix of /16" "$P[\"networking\"] = \"public\"; $P[\"allowedIpRanges\"] = [\"203.0.0.0/16\"]"
+validate_rejects "softDeleteDays 0" "should be greater than or equal to 1\|minimum\|greater than" "$P[\"softDeleteDays\"] = 0"
+validate_rejects "an unknown deletionPolicy" "Unsupported value\|enum" 'd["spec"]["deletionPolicy"] = "Retain"'
+validate_accepts "deletionPolicy Delete" 'd["spec"]["deletionPolicy"] = "Delete"'
 validate_accepts "public with allowedIpRanges" "$P[\"networking\"] = \"public\"; $P[\"allowedIpRanges\"] = [\"203.0.113.0/24\", \"198.51.100.7\"]"
 validate_accepts "Premium BlockBlobStorage LRS" "$P[\"accountTier\"] = \"Premium\"; $P[\"accountKind\"] = \"BlockBlobStorage\"; $P[\"replication\"] = \"LRS\""
 validate_accepts "a 24 character name" "$P[\"name\"] = \"a\" * 24"

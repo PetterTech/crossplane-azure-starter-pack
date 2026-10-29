@@ -24,6 +24,7 @@ Every unresolved path calls `fail`, which makes the function result Fatal: nothi
 | `SubscriptionMismatch` | `spec.subscription` differs from the pin |
 | `SubscriptionChanged` | the pinned Subscription is gone, was recreated (uid differs), its subscriptionId differs, or the pin is incomplete |
 | `EnvironmentInvalid` | a key the kind needs is missing, a `<PLACEHOLDER>`, or malformed |
+| `SubnetNotConfigured` | StorageAccount only: `networking` private, no valid `subnetId` and nothing pinned yet |
 | `LocationNotAllowed` | the location is not in the EnvironmentConfig `allowedLocations` (checked once, when the location is first pinned) |
 
 Because a custom condition set next to a Fatal result is shown as Unknown, these failures are visible in the `Synced` message, not as `False` conditions.
@@ -34,7 +35,7 @@ Because a custom condition set next to a Fatal result is shown as Unknown, these
 
 function-kro cannot read the environment context. The resolver therefore also writes the values kro needs into `status.environment` (`ipamPoolId`, and `hubVirtualHubId` when the platform has a hub, both from the EnvironmentConfig on first use; once `status.environment` exists it is re-emitted unchanged, because the XRD makes it write-once as a whole object), and kro reads them through an `externalRef` to the XR itself. Nothing is composed on the first reconcile, because the pin does not exist yet.
 
-`StorageAccount` (in `projects/services`, which carries its own inline copy; `validate.sh` checks every `projects/*/apis/*/composition.yaml` against this one file) adds `subnetId` to `status.environment`. The live value is used only when it is a well-formed subnet resource ID; a missing, placeholder or malformed value counts as absent. `SubnetNotConfigured` (non-fatal, `EnvironmentValid=False`) is reported when `networking` is private and there is no subnet. If nothing is pinned yet, the whole `status.environment` is withheld, so nothing is composed or pinned until the platform provides a subnet. Once pinned the value is re-emitted unchanged and drift is reported.
+`StorageAccount` (in `projects/services`, which carries its own inline copy; `validate.sh` checks every `projects/*/apis/*/composition.yaml` against this one file) adds `subnetId` to `status.environment`. The live value is used only when it is a well-formed subnet resource ID; a missing, placeholder or malformed value counts as absent. `SubnetNotConfigured` is Fatal when `networking` is private, there is no valid subnet and nothing is pinned yet: nothing is composed or pinned and `Ready` is not reported (see `Synced`). For an account already pinned without a subnet (public, later flipped to private) it is non-fatal: `EnvironmentValid=False` and no endpoint. Once pinned the value is re-emitted unchanged and drift is reported.
 
 ## Adding a building block
 

@@ -1,0 +1,36 @@
+# The same XR after the resolver pinned subscription and environment (reconcile 2 onwards).
+apiVersion: platform.a5n.io/v1alpha1
+kind: VirtualNetwork
+metadata:
+  name: spoke
+  namespace: team-a
+  uid: 7a1b2c3d-0000-4000-8000-000000000001
+spec:
+  parameters:
+    size: small
+    createSubnet: true
+    peerToHub: true
+    networkSecurityGroup:
+      enabled: true
+      allowInbound:
+        - name: https-from-vnet
+          port: 443
+          protocol: Tcp
+          sourceAddressPrefix: VirtualNetwork
+        - name: dns-from-corp
+          port: 53
+          protocol: Udp
+          sourceAddressPrefix: 10.0.0.0/8
+    tags:
+      costCenter: "0000"
+      owner: platform-team@example.com
+      environment: sandbox
+status:
+  subscription: sub-a
+  subscriptionUid: 4f0c1d2e-0000-4000-8000-00000000000a
+  subscriptionId: eeeeeeee-1111-2222-3333-ffffffffffff
+  environment:
+    location: northeurope
+    resourceGroupName: rg-pinned
+    ipamPoolId: /subscriptions/cccccccc-1111-2222-3333-dddddddddddd/resourceGroups/rg-test/providers/Microsoft.Network/networkManagers/nm-test/ipamPools/pool-test
+    hubVirtualHubId: /subscriptions/cccccccc-1111-2222-3333-dddddddddddd/resourceGroups/rg-test/providers/Microsoft.Network/virtualHubs/hub-test

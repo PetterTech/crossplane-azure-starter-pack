@@ -31,3 +31,15 @@ Subscriptions created by the `Subscription` API (`docs/apis/subscription.md`) ar
 - a tag policy for `costCenter` and `owner`.
 
 After the first sandbox subscription is vended, check that the Defender plans are on.
+
+## Network baseline
+
+`VirtualNetwork` (`docs/apis/virtualnetwork.md`) creates a VNet, one subnet and an NSG. These controls are prerequisites, not shipped policy.
+
+- **Flow logs and NSG diagnostic settings.** Not composed (accepted exception E8, V2). Enable NSG flow logs or VNet flow logs through Network Watcher, and diagnostic settings on the NSG, from the management group.
+- **DDoS protection.** Not composed (accepted exception E8, V5). Add a DDoS protection plan or IP protection where the workload is Internet-facing.
+- **Backstop policies.** Assign at the management group: "Subnets should be associated with a Network Security Group" and "Network Watcher should be enabled".
+- **Azure Firewall / NVA.** Not composed. The platform hub is the central control point for egress and inspection.
+- **Tenant rights.** Tenants have no RBAC to add subnets or NSGs, so the VNet's single subnet and NSG are the only ones in the tenant namespace's path.
+
+After the first sandbox subscription is vended and a VirtualNetwork is Ready, check that Defender for Cloud reports no unaddressed recommendations for the VNet, subnet and NSG.

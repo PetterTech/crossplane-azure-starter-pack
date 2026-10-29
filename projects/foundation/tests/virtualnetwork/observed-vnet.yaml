@@ -1,0 +1,18 @@
+# VirtualNetwork MR Ready with its allocated address space (reconcile 3).
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: VirtualNetwork
+metadata:
+  name: spoke-vnet
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: vnet
+    crossplane.io/external-name: spoke
+  labels:
+    crossplane.io/composite: spoke
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.Network/virtualNetworks/spoke
+    addressSpace:
+      - 10.20.0.0/24
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

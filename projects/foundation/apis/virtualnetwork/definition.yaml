@@ -46,6 +46,7 @@ spec:
             spec:
               type: object
               description: Desired virtual network. Every field is optional.
+              default: {}
               x-kubernetes-validations:
                 - rule: "!has(oldSelf.subscription) || (has(self.subscription) && self.subscription == oldSelf.subscription)"
                   message: "spec.subscription can't be changed once set. Create a new VirtualNetwork instead."
@@ -72,6 +73,7 @@ spec:
                 parameters:
                   type: object
                   description: Settings of the virtual network.
+                  default: {}
                   x-kubernetes-validations:
                     - rule: "!has(self.networkSecurityGroup) || !has(self.networkSecurityGroup.allowInbound) || size(self.networkSecurityGroup.allowInbound) == 0 || !has(self.networkSecurityGroup.enabled) || self.networkSecurityGroup.enabled"
                       message: "networkSecurityGroup.allowInbound requires networkSecurityGroup.enabled to be true."
@@ -157,12 +159,14 @@ spec:
                               sourceAddressPrefix:
                                 type: string
                                 description: >-
-                                  Source as a CIDR range, for example 10.0.0.0/8, or the service tag VirtualNetwork.
-                                  The Internet, wildcard and 0.0.0.0/0 sources are not allowed.
-                                maxLength: 43
+                                  Source: the service tag VirtualNetwork, or a private (RFC 1918) CIDR range inside
+                                  10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16. Public ranges, the Internet and
+                                  wildcards are not allowed, so no rule (including SSH 22 or RDP 3389) opens the
+                                  subnet to the Internet.
+                                maxLength: 18
                                 x-kubernetes-validations:
-                                  - rule: "self == 'VirtualNetwork' || (self.matches('^[0-9]{1,3}(\\\\.[0-9]{1,3}){3}/([0-9]|[12][0-9]|3[0-2])$') && self != '0.0.0.0/0')"
-                                    message: "Use a CIDR range other than 0.0.0.0/0, or the service tag VirtualNetwork."
+                                  - rule: "self == 'VirtualNetwork' || self.matches('^10\\\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])/([89]|[12][0-9]|3[0-2])$') || self.matches('^172\\\\.(1[6-9]|2[0-9]|3[01])\\\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])/(1[2-9]|2[0-9]|3[0-2])$') || self.matches('^192\\\\.168\\\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\\\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])/(1[6-9]|2[0-9]|3[0-2])$')"
+                                    message: "Use the service tag VirtualNetwork or a private (RFC 1918) CIDR range: 10.0.0.0/8, 172.16.0.0/12 or 192.168.0.0/16 and smaller."
                           x-kubernetes-list-type: map
                           x-kubernetes-list-map-keys: [name]
                     tags:
@@ -208,8 +212,11 @@ spec:
                 environment:
                   type: object
                   description: >-
-                    Effective environment values recorded when the virtual network was first composed.
-                    Later changes to the EnvironmentConfig do not move existing resources.
+                    Effective environment values recorded once, as a whole, when the virtual network was first
+                    composed. Later changes to the EnvironmentConfig do not move existing resources: a hub
+                    added to the environment afterwards does not reach an existing virtual network (create a
+                    new one), and a removed hub does not remove the connection. The EnvironmentDrift
+                    condition reports the difference.
                   properties:
                     location:
                       type: string
@@ -217,6 +224,14 @@ spec:
                     resourceGroupName:
                       type: string
                       description: Resource group in use.
+                    ipamPoolId:
+                      type: string
+                      description: IPAM pool the address space was allocated from, as recorded when first composed.
+                    hubVirtualHubId:
+                      type: string
+                      description: >-
+                        Virtual hub of the EnvironmentConfig at first composition, if the platform had one.
+                        The hub connection is composed from this value when peerToHub is true.
                 vnetName:
                   type: string
                   description: Name of the virtual network in Azure.

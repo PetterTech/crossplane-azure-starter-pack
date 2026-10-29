@@ -197,6 +197,16 @@ kro = pins.select { |k, _| k.end_with?("/function-kro") }
 errors << "function-kro must be pinned exactly to v0.3.0: #{kro}" unless !kro.empty? && kro.values.flat_map(&:values).uniq == ["v0.3.0"]
 errors << "setup/functions.yaml must install function-go-templating (resolver exception E6)" unless pins.keys.any? { |k| k.end_with?("/function-go-templating") }
 
+resolver = File.read("projects/foundation/apis/_shared/resolver.gotmpl")
+Dir["projects/*/apis/*/composition.yaml"].sort.each do |f|
+  load_all(f).each do |d|
+    step = (d.dig("spec", "pipeline") || []).find { |s| s["step"] == "resolve-subscription" }
+    next unless step
+    inlined = step.dig("input", "inline", "template").to_s
+    errors << "#{f}: resolve-subscription template differs from apis/_shared/resolver.gotmpl (run apis/_shared/sync-resolver.sh #{f})" unless inlined.strip == resolver.strip
+  end
+end
+
 errors << "provider versions must be >= v2.7.1" if pins.select { |k, _| k.include?("/upbound/provider-") }.values.flat_map(&:values).any? { |v| Gem::Version.new(v.delete_prefix("v")) < Gem::Version.new("2.7.1") }
 
 begin

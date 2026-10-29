@@ -85,3 +85,56 @@ First-deployment gates, owned by Imoen with a Drizzt re-check:
 - the workload identity webhook injects the token without a client ID annotation;
 - the ABAC condition syntax is valid at management-group scope for both write and delete;
 - the Azure-side management-group association rights actually work.
+
+## Custom roles for VirtualNetwork (E11)
+
+The identity-admin identity creates these two custom roles and grants them to each per-subscription UAMI; no composition does. Role definition IDs are environment-specific and not listed here.
+
+| Role | Actions | Scope |
+|---|---|---|
+| Hub connection manager | `Microsoft.Network/virtualHubs/hubVirtualNetworkConnections/read`, `.../write`, `.../delete` | the platform virtual hub |
+| IPAM pool associator | `Microsoft.Network/ipamPools/associateResourcesToPool/action` | the IPAM pool |
+
+Not Network Contributor, and never subscription-wide. Without them `VirtualNetwork` fails closed with a 403. See `docs/apis/virtualnetwork.md` for the blast radius.
+
+Owner of E11 is Petter. It is open to veto.
+
+## Unverified until the first sandbox deploy
+
+None of these is proven outside `crossplane render` and `kind-cel.sh`. Verify each in the sandbox:
+
+- The exact RBAC actions the provider needs for VirtualHubConnection and IPAM allocation. The action names above are a design assumption.
+- The 403 fail-closed behaviour actually occurring when the two custom roles are absent.
+- The hub route-table isolation design (E12).
+- The CEL cost budget and the source-prefix regexes being accepted by a real API server, beyond what `kind-cel.sh` shows.
+- The go-templating `ExtraResources` templated-namespace restriction, and Fatal retaining composed resources, on a live Crossplane.
+
+## Install prerequisite: Crossplane RBAC for platform kinds
+
+Crossplane's service account needs get/list/watch on the `platform.a5n.io` XR kinds and on every composed kind. Crossplane v2 aggregates ClusterRoles labelled `rbac.crossplane.io/aggregate-to-crossplane: "true"` into its own role. Without this the XR controllers cannot start watching. Untested outside kind.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: platform-a5n-crossplane
+  labels:
+    rbac.crossplane.io/aggregate-to-crossplane: "true"
+rules:
+  - apiGroups: ["platform.a5n.io"]
+    resources: ["subscriptions", "virtualnetworks"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["platform.a5n.io"]
+    resources: ["subscriptions/status", "virtualnetworks/status"]
+    verbs: ["get", "update", "patch"]
+  - apiGroups:
+      - network.azure.m.upbound.io
+      - managedidentity.azure.m.upbound.io
+      - authorization.azure.m.upbound.io
+      - management.azure.m.upbound.io
+      - azure.m.upbound.io
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+```
+
+Adjust the provider groups to the CRDs your compositions compose. Composed kinds in other groups need the same grant.

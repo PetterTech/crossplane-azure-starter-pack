@@ -1,0 +1,27 @@
+# Parameters are written out in full: crossplane render does not apply XRD defaults to the input XR.
+apiVersion: platform.a5n.io/v1alpha1
+kind: VirtualNetwork
+metadata:
+  name: spoke
+  namespace: team-a
+  uid: 7a1b2c3d-0000-4000-8000-000000000001
+spec:
+  parameters:
+    size: small
+    createSubnet: true
+    peerToHub: true
+    networkSecurityGroup:
+      enabled: true
+      allowInbound:
+        - name: https-from-vnet
+          port: 443
+          protocol: Tcp
+          sourceAddressPrefix: VirtualNetwork
+        - name: dns-from-corp
+          port: 53
+          protocol: Udp
+          sourceAddressPrefix: 10.0.0.0/8
+    tags:
+      costCenter: "0000"
+      owner: platform-team@example.com
+      environment: sandbox

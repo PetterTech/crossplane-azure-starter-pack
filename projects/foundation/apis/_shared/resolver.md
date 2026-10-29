@@ -1,0 +1,39 @@
+# Shared resolver (accepted exception E6)
+
+`resolver.gotmpl` is the one go-templating step allowed in a building block (`resolve-subscription`). It sits after function-kro in the pipeline and before auto-ready. Packages cannot share files, so every building-block composition carries an identical inlined copy. `sync-resolver.sh <composition.yaml>...` writes the copy between the `# BEGIN resolver` and `# END resolver` markers, and `scripts/validate.sh` fails when a copy differs from this file. Edit `resolver.gotmpl`, then sync; never edit a copy.
+
+## What it does
+
+1. Asks Crossplane for every `platform.a5n.io/v1alpha1` `Subscription` in the XR's namespace (go-templating `ExtraResources` with a templated namespace; no label selector, so the whole namespace is listed). The first call of a reconcile returns only that requirement.
+2. Resolves the Subscription: the pinned `status.subscription`, else `spec.subscription`, else the only Ready Subscription in the namespace.
+3. Pins `status.subscription`, `status.subscriptionUid` and `status.subscriptionId` (write-once, enforced by the XRD) and verifies the pin on every reconcile.
+4. Resolves and pins `status.environment` (`location`, `resourceGroupName`, and per kind the extra keys below) from `spec.parameters` overrides and the EnvironmentConfig, checks the keys the kind needs, and reports drift.
+5. Sets the conditions `SubscriptionResolved`, `EnvironmentValid` and `EnvironmentDrift`.
+
+Every composed resource uses the namespaced `ProviderConfig` named after the resolved Subscription (`status.subscription`).
+
+## Fail closed
+
+Every unresolved path calls `fail`, which makes the function result Fatal: nothing is applied or deleted, `Synced` becomes `False` with the reason as message prefix, and function-auto-ready is never reached (with no composed resources it would report Ready).
+
+| Prefix | When |
+| --- | --- |
+| `SubscriptionNotFound` | no Subscription in the namespace |
+| `SubscriptionAmbiguous` | several Ready Subscriptions and no `spec.subscription` |
+| `SubscriptionNotReady` | the chosen Subscription is not Ready or has no `status.subscriptionId` |
+| `SubscriptionMismatch` | `spec.subscription` differs from the pin |
+| `SubscriptionChanged` | the pinned Subscription is gone, was recreated (uid differs), its subscriptionId differs, or the pin is incomplete |
+| `EnvironmentInvalid` | a key the kind needs is missing, a `<PLACEHOLDER>`, or malformed |
+| `LocationNotAllowed` | the location is not in the EnvironmentConfig `allowedLocations` (checked once, when the location is first pinned) |
+
+Because a custom condition set next to a Fatal result is shown as Unknown, these failures are visible in the `Synced` message, not as `False` conditions.
+
+`HubNotConfigured` (`peerToHub` true, no usable `hubVirtualHubId`) is the one non-fatal case: `EnvironmentValid` is `False` and the hub connection is not composed.
+
+## Handing the environment to function-kro
+
+function-kro cannot read the environment context. The resolver therefore also writes the values kro needs into `status.environment` (`ipamPoolId`, and `hubVirtualHubId` when the platform has a hub, both from the EnvironmentConfig on first use; once `status.environment` exists it is re-emitted unchanged, because the XRD makes it write-once as a whole object), and kro reads them through an `externalRef` to the XR itself. Nothing is composed on the first reconcile, because the pin does not exist yet.
+
+## Adding a building block
+
+Add a row to the per-kind key table (`$required`) for the EnvironmentConfig keys the block uses, copy the step from an existing composition, run `sync-resolver.sh`, and declare any new `status.environment` key in the XRD.

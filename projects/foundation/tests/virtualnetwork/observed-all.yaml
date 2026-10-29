@@ -1,0 +1,82 @@
+# Everything Ready (steady state).
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: VirtualNetwork
+metadata:
+  name: spoke-vnet
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: vnet
+    crossplane.io/external-name: spoke
+  labels:
+    crossplane.io/composite: spoke
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.Network/virtualNetworks/spoke
+    addressSpace:
+      - 10.20.0.0/24
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: Subnet
+metadata:
+  name: spoke-subnet
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: subnet
+    crossplane.io/external-name: default
+  labels:
+    crossplane.io/composite: spoke
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.Network/virtualNetworks/spoke/subnets/default
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: SecurityGroup
+metadata:
+  name: spoke-nsg
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: nsg
+    crossplane.io/external-name: spoke-nsg
+  labels:
+    crossplane.io/composite: spoke
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.Network/networkSecurityGroups/spoke-nsg
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: SubnetNetworkSecurityGroupAssociation
+metadata:
+  name: spoke-nsgassociation
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: nsgAssociation
+    crossplane.io/external-name: spoke-nsg-assoc
+  labels:
+    crossplane.io/composite: spoke
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.Network/virtualNetworks/spoke/subnets/default
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: VirtualHubConnection
+metadata:
+  name: spoke-hubconnection
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: hubConnection
+    crossplane.io/external-name: team-a-spoke-7a1b2c3d
+  labels:
+    crossplane.io/composite: spoke
+status:
+  atProvider:
+    id: /subscriptions/cccccccc-1111-2222-3333-dddddddddddd/resourceGroups/rg-test/providers/Microsoft.Network/virtualHubs/hub-test/hubVirtualNetworkConnections/x
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

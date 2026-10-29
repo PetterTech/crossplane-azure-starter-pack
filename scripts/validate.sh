@@ -128,9 +128,69 @@ end
 
 guid = /\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b/
 (Dir["setup/*.{yaml,yml}"] + Dir["docs/*.md"]).sort.each do |f|
-  txt = File.read(f)
+  txt = File.read(f).gsub("b24988ac-6180-42a0-ab88-20f7382dd24c", "")
   errors << "#{f}: contains a real-looking GUID (use <UPPER_SNAKE> placeholders)" if txt =~ guid
   errors << "#{f}: secret material is not allowed" if f.start_with?("setup/") && txt =~ /clientSecret|secretRef|source:\s*Secret|kind:\s*Secret|AZURE_CLIENT_SECRET/
+end
+
+env_keys = %w[tenantId location resourceGroupName subnetId ipamPoolId hubVirtualHubId billingScopeId managementGroupId identitySubscriptionId identityResourceGroupName oidcIssuerUrl providerServiceAccountSubject subscriptionRoleDefinitionId]
+envs = Dir["setup/*.yaml"].sort.flat_map { |f| load_all(f).select { |d| d["kind"] == "EnvironmentConfig" }.map { |d| [f, d] } }
+if envs.size != 1
+  errors << "setup must contain exactly one EnvironmentConfig, got #{envs.size}"
+else
+  f, d = envs.first
+  errors << "#{f}: EnvironmentConfig must be apiextensions.crossplane.io/v1beta1 named platform-environment" unless d["apiVersion"] == "apiextensions.crossplane.io/v1beta1" && d.dig("metadata", "name") == "platform-environment"
+  data = d["data"] || {}
+  missing = env_keys - data.keys
+  errors << "#{f}: missing keys #{missing}" unless missing.empty?
+  extra = data.keys - env_keys - ["allowedLocations"]
+  errors << "#{f}: unexpected keys #{extra}" unless extra.empty?
+  data.each do |k, v|
+    next if k == "providerServiceAccountSubject"
+    errors << "#{f}: #{k} must be a quoted <UPPER_SNAKE> placeholder, got #{v.inspect}" unless v.is_a?(String) && v =~ /\A<[A-Z0-9_]+>\z/
+  end
+  rd = data["subscriptionRoleDefinitionId"]
+  errors << "#{f}: subscriptionRoleDefinitionId placeholder must be exactly <CONTRIBUTOR_ROLE_DEFINITION_ID> (the name used in docs/identity-bootstrap.md), got #{rd.inspect}" if rd.to_s.start_with?("<") && rd != "<CONTRIBUTOR_ROLE_DEFINITION_ID>"
+  sa = drcs.dig(shared_sa, "spec", "serviceAccountTemplate", "metadata", "name")
+  errors << "#{f}: providerServiceAccountSubject must be system:serviceaccount:crossplane-system:#{sa}, got #{data["providerServiceAccountSubject"].inspect}" unless data["providerServiceAccountSubject"] == "system:serviceaccount:crossplane-system:#{sa}"
+end
+errors << "function-environment-configs must be pinned exactly to v0.9.2 in setup and all projects: #{pins.select { |k, _| k.end_with?("/function-environment-configs") }}" unless (envfn = pins.select { |k, _| k.end_with?("/function-environment-configs") }).size == 1 && envfn.values.first.values.uniq == ["v0.9.2"] && envfn.values.first.size == 4
+
+manifests = []
+(Dir["{setup,projects,examples,docs}/**/*.{yaml,yml}"] + Dir["examples/**/*.{yaml,yml}"]).uniq.sort.each do |f|
+  load_all(f).each { |d| manifests << [f, d] } rescue nil
+end
+Dir["{setup,projects,examples,docs}/**/*.md", "*.md"].uniq.sort.each do |f|
+  File.read(f).scan(/^```ya?ml\n(.*?)^```/m).each do |(blk)|
+    (YAML.load_stream(blk).compact.each { |d| manifests << [f, d] } rescue nil)
+  end
+end
+
+walk = lambda do |o, &blk|
+  case o
+  when Hash then blk.call(o); o.each_value { |v| walk.call(v, &blk) }
+  when Array then o.each { |v| walk.call(v, &blk) }
+  end
+end
+write_verbs = %w[create update patch delete deletecollection *]
+manifests.each do |f, d|
+  next unless d.is_a?(Hash)
+  if %w[Role ClusterRole].include?(d["kind"])
+    (d["rules"] || []).each do |r|
+      groups = Array(r["apiGroups"]).map(&:to_s)
+      res = Array(r["resources"]).map { |x| x.to_s.downcase }
+      next unless res.include?("*") || res.any? { |x| x.split("/").first == "environmentconfigs" }
+      next unless groups.empty? || groups.include?("*") || groups.include?("apiextensions.crossplane.io")
+      bad = Array(r["verbs"]).map(&:to_s) & write_verbs
+      errors << "#{f}: #{d["kind"]} #{d.dig("metadata", "name")} grants write verbs #{bad} on environmentconfigs (EnvironmentConfig must be read-only)" unless bad.empty?
+    end
+  end
+  walk.call(d) do |h|
+    Array(h["environmentConfigs"]).each do |ec|
+      next unless ec.is_a?(Hash)
+      errors << "#{f}: environmentConfigs input must use type: Reference by name, not Selector" if ec["type"].to_s == "Selector" || ec.key?("selector")
+    end
+  end
 end
 
 kro = pins.select { |k, _| k.end_with?("/function-kro") }

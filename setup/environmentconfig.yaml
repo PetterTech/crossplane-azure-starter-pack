@@ -1,0 +1,48 @@
+# Environment contract: the only place environment-specific values live.
+# One EnvironmentConfig per cluster. Compositions read it through
+# function-environment-configs; never hard-code these values in compositions.
+# Editing a value does not move live resources: location and resourceGroupName
+# are pinned in each XR's status when it is first composed.
+# Replace every <PLACEHOLDER> from your environment; never commit real IDs.
+#
+# Pipeline step to add to a Composition (first step, before other functions):
+#
+#   - step: environment
+#     functionRef:
+#       name: function-environment-configs
+#     input:
+#       apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+#       kind: Input
+#       spec:
+#         environmentConfigs:
+#           - type: Reference
+#             ref:
+#               name: platform-environment
+#
+# The values are then available under the context key
+# apiextensions.crossplane.io/environment (for example in P&T or go-templating).
+# function-kro cannot see that context; it reads values through an externalRef
+# to this EnvironmentConfig (apiextensions.crossplane.io/v1beta1).
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: platform-environment
+data:
+  tenantId: "<TENANT_ID>"
+  location: "<LOCATION>"
+  resourceGroupName: "<RESOURCE_GROUP_NAME>"
+  subnetId: "<SUBNET_ID>"
+  ipamPoolId: "<IPAM_POOL_ID>"
+  hubVirtualHubId: "<HUB_VIRTUAL_HUB_ID>"
+  billingScopeId: "<BILLING_SCOPE_ID>"
+  managementGroupId: "<MANAGEMENT_GROUP_ID>"
+  identitySubscriptionId: "<IDENTITY_SUBSCRIPTION_ID>"
+  identityResourceGroupName: "<IDENTITY_RESOURCE_GROUP_NAME>"
+  oidcIssuerUrl: "<OIDC_ISSUER_URL>"
+  # Subject of the shared provider tier; must match the ServiceAccount in setup/deployment-runtime-config.yaml.
+  providerServiceAccountSubject: "system:serviceaccount:crossplane-system:provider-azure"
+  # The real value must be the Contributor role definition ID (b24988ac-6180-42a0-ab88-20f7382dd24c)
+  # and must match the role definition in the ABAC condition in docs/identity-bootstrap.md.
+  subscriptionRoleDefinitionId: "<CONTRIBUTOR_ROLE_DEFINITION_ID>"
+  # Optional, comma-separated:
+  # allowedLocations: "<ALLOWED_LOCATIONS>"

@@ -1,0 +1,4 @@
+apiVersion: spike.a5n.io/v1alpha1
+kind: Svc
+metadata: {name: s1, namespace: team-a}
+spec: {networking: private, subnetId: /subscriptions/0/subnet}

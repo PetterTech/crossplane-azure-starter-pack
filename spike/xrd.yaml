@@ -1,0 +1,73 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: svcs.spike.a5n.io
+spec:
+  scope: Namespaced
+  group: spike.a5n.io
+  names: {kind: Svc, plural: svcs}
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        x-kubernetes-validations:
+        - rule: "self.metadata.name != 'default' && !self.metadata.name.startsWith('platform-') && size(self.metadata.name) <= 30"
+          message: name must not be default, must not start with platform-, max 30 characters
+        properties:
+          spec:
+            type: object
+            properties:
+              networking: {type: string, enum: [public, private], default: public}
+              subscription: {type: string}
+              subnetId: {type: string}
+              location: {type: string}
+              virtualNetwork: {type: string}
+            x-kubernetes-validations:
+            - rule: "has(oldSelf.subscription) == has(self.subscription) && (!has(self.subscription) || self.subscription == oldSelf.subscription)"
+              message: spec.subscription is immutable (including omitted to set)
+          status:
+            type: object
+            x-kubernetes-validations:
+            - rule: "!has(oldSelf.subscription) || (has(self.subscription) && self.subscription == oldSelf.subscription)"
+              message: status.subscription is write-once
+            properties:
+              subscription: {type: string}
+              subscriptionUid: {type: string}
+              subscriptionId: {type: string}
+              subnet: {type: string}
+              peName: {type: string}
+              envSubnet: {type: string}
+              fromStatus: {type: string}
+              listed: {type: string}
+              resolution: {type: string}
+              readyNames: {type: string}
+              marker: {type: string}
+              environment: {type: object, x-kubernetes-preserve-unknown-fields: true}
+---
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: subs.spike.a5n.io
+spec:
+  scope: Namespaced
+  group: spike.a5n.io
+  names: {kind: Sub, plural: subs}
+  versions:
+  - name: v1alpha1
+    served: true
+    referenceable: true
+    schema:
+      openAPIV3Schema:
+        type: object
+        properties:
+          spec:
+            type: object
+            properties:
+              subscriptionId: {type: string}
+          status:
+            type: object
+            properties:
+              subscriptionId: {type: string}

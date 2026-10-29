@@ -1,0 +1,35 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata: {name: sub-live}
+spec:
+  compositeTypeRef: {apiVersion: spike.a5n.io/v1alpha1, kind: Sub}
+  mode: Pipeline
+  pipeline:
+  - step: stamp
+    functionRef: {name: function-go-templating}
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      kind: GoTemplate
+      source: Inline
+      inline:
+        template: |
+          ---
+          apiVersion: spike.a5n.io/v1alpha1
+          kind: Sub
+          metadata:
+            labels:
+              spike.a5n.io/subscription: "true"
+          status:
+            subscriptionId: {{ .observed.composite.resource.spec.subscriptionId | default "" | quote }}
+          ---
+          apiVersion: v1
+          kind: ConfigMap
+          metadata:
+            name: pc-{{ .observed.composite.resource.metadata.name }}
+            annotations:
+              gotemplating.fn.crossplane.io/composition-resource-name: providerconfig
+              gotemplating.fn.crossplane.io/ready: "True"
+          data:
+            standsFor: ProviderConfig
+  - step: auto-ready
+    functionRef: {name: function-auto-ready}

@@ -1,0 +1,36 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata: {name: svc-kro-list}
+spec:
+  compositeTypeRef: {apiVersion: spike.a5n.io/v1alpha1, kind: Svc}
+  mode: Pipeline
+  pipeline:
+  - step: kro
+    functionRef: {name: function-kro}
+    input:
+      apiVersion: kro.fn.crossplane.io/v1alpha1
+      kind: ResourceGraph
+      status:
+        listed: ${string(size(subs))}
+        readyNames: ${subs.filter(s, s.status.conditions.exists(c, c.type == "Ready" && c.status == "True")).map(s, s.metadata.namespace + "/" + s.metadata.name).join(",")}
+      resources:
+      - id: subs
+        externalRef:
+          apiVersion: spike.a5n.io/v1alpha1
+          kind: Sub
+          metadata:
+            namespace: ${schema.metadata.namespace}
+            selector:
+              matchLabels:
+                spike.a5n.io/subscription: "true"
+      - id: main
+        includeWhen:
+        - ${size(subs.filter(s, s.status.conditions.exists(c, c.type == "Ready" && c.status == "True"))) == 1}
+        template:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata: {}
+          data:
+            sub: ${subs.filter(s, s.status.conditions.exists(c, c.type == "Ready" && c.status == "True"))[0].metadata.name}
+  - step: auto-ready
+    functionRef: {name: function-auto-ready}

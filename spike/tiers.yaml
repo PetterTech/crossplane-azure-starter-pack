@@ -1,0 +1,34 @@
+apiVersion: pkg.crossplane.io/v1beta1
+kind: DeploymentRuntimeConfig
+metadata: {name: tier-identity}
+spec:
+  serviceAccountTemplate: {metadata: {name: provider-azure-identity}}
+  deploymentTemplate:
+    spec:
+      selector: {}
+      template:
+        spec:
+          containers:
+          - name: package-runtime
+            args: ["--max-reconcile-rate=1"]
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata: {name: provider-azure-managedidentity}
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-managedidentity:v2.8.0
+  runtimeConfigRef: {name: tier-identity}
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata: {name: provider-azure-authorization}
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-authorization:v2.8.0
+  runtimeConfigRef: {name: tier-identity}
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata: {name: provider-azure-storage-tier2}
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-storage:v2.8.0
+  runtimeConfigRef: {name: tier-identity}

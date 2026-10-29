@@ -1,0 +1,7 @@
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata: {name: platform-environment}
+data:
+  location: westeurope
+  resourceGroupName: rg-env
+  subnetId: /subscriptions/0/subnets/env-subnet

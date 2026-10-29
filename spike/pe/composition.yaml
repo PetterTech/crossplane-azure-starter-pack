@@ -1,0 +1,42 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata: {name: svc-kro-pe}
+spec:
+  compositeTypeRef: {apiVersion: spike.a5n.io/v1alpha1, kind: Svc}
+  mode: Pipeline
+  pipeline:
+  - step: kro
+    functionRef: {name: function-kro}
+    input:
+      apiVersion: kro.fn.crossplane.io/v1alpha1
+      kind: ResourceGraph
+      status:
+        peName: ${pe.metadata.name}
+      resources:
+      - id: main
+        template:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata: {}
+          data: {kind: main}
+      - id: pe
+        includeWhen:
+        - ${schema.spec.networking == "private"}
+        template:
+          apiVersion: network.azure.m.upbound.io/v1beta1
+          kind: PrivateEndpoint
+          metadata: {}
+          spec:
+            providerConfigRef: {kind: ProviderConfig, name: sub-a}
+            forProvider:
+              location: westeurope
+              resourceGroupName: rg
+              subnetId: ${schema.spec.subnetId}
+              privateServiceConnection:
+                name: psc
+                isManualConnection: false
+                privateConnectionResourceId: /subscriptions/0/x
+                subresourceNames: [blob]
+              privateDnsZoneGroup:
+                name: default
+                privateDnsZoneIds: [/subscriptions/0/dns]

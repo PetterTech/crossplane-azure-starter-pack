@@ -1,0 +1,56 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata: {name: svc-kro-resolver}
+spec:
+  compositeTypeRef: {apiVersion: spike.a5n.io/v1alpha1, kind: Svc}
+  mode: Pipeline
+  pipeline:
+  - step: kro
+    functionRef: {name: function-kro}
+    input:
+      apiVersion: kro.fn.crossplane.io/v1alpha1
+      kind: ResourceGraph
+      status:
+        subscription: ${resolved.data.name}
+        subscriptionUid: ${resolved.data.uid}
+        resolution: ${resolved.data.message}
+      resources:
+      - id: subs
+        externalRef:
+          apiVersion: spike.a5n.io/v1alpha1
+          kind: Sub
+          metadata:
+            namespace: ${schema.metadata.namespace}
+            selector:
+              matchLabels:
+                spike.a5n.io/subscription: "true"
+      - id: xr
+        externalRef:
+          apiVersion: spike.a5n.io/v1alpha1
+          kind: Svc
+          metadata:
+            name: '${schema.metadata.name}'
+            namespace: ${schema.metadata.namespace}
+      - id: resolved
+        readyWhen:
+        - ${resolved.data.ok == "true"}
+        template:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata: {}
+          data:
+            ok: '${string(cel.bind(ready, subs.filter(s, s.status.conditions.exists(c, c.type == "Ready" && c.status == "True")), cel.bind(pin, has(xr.status.subscription) ? xr.status.subscription : "", pin != "" ? ready.exists(s, s.metadata.name == pin && s.metadata.uid == xr.status.subscriptionUid) : (has(schema.spec.subscription) ? ready.exists(s, s.metadata.name == schema.spec.subscription) : size(ready) == 1))))}'
+            name: '${cel.bind(ready, subs.filter(s, s.status.conditions.exists(c, c.type == "Ready" && c.status == "True")), has(xr.status.subscription) ? xr.status.subscription : (has(schema.spec.subscription) ? schema.spec.subscription : (size(ready) == 1 ? ready[0].metadata.name : "")))}'
+            uid: '${cel.bind(ready, subs.filter(s, s.status.conditions.exists(c, c.type == "Ready" && c.status == "True")), has(xr.status.subscriptionUid) ? xr.status.subscriptionUid : (size(ready) == 1 ? ready[0].metadata.uid : ""))}'
+            message: ${string(size(subs))} candidates
+      - id: main
+        includeWhen:
+        - ${resolved.data.ok == "true"}
+        template:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata: {}
+          data:
+            sub: ${resolved.data.name}
+  - step: auto-ready
+    functionRef: {name: function-auto-ready}

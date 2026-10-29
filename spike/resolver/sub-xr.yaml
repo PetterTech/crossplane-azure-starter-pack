@@ -1,0 +1,4 @@
+apiVersion: spike.a5n.io/v1alpha1
+kind: Sub
+metadata: {name: sub-a, namespace: team-a}
+spec: {subscriptionId: "0000-a"}

@@ -1,0 +1,58 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata: {name: svc-live}
+spec:
+  compositeTypeRef: {apiVersion: spike.a5n.io/v1alpha1, kind: Svc}
+  mode: Pipeline
+  pipeline:
+  - step: environment
+    functionRef: {name: function-environment-configs}
+    input:
+      apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+      kind: Input
+      spec:
+        environmentConfigs:
+        - type: Reference
+          ref: {name: platform-environment}
+  - step: kro
+    functionRef: {name: function-kro}
+    input:
+      apiVersion: kro.fn.crossplane.io/v1alpha1
+      kind: ResourceGraph
+      status:
+        peName: ${pe.metadata.name}
+        envSubnet: ${env.data.subnetId}
+      resources:
+      - id: env
+        externalRef:
+          apiVersion: apiextensions.crossplane.io/v1beta1
+          kind: EnvironmentConfig
+          metadata: {name: platform-environment}
+      - id: main
+        readyWhen:
+        - ${main.data.kind == "main"}
+        template:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata: {}
+          data: {kind: main}
+      - id: pe
+        includeWhen:
+        - ${schema.spec.networking == "private"}
+        template:
+          apiVersion: network.azure.m.upbound.io/v1beta1
+          kind: PrivateEndpoint
+          metadata: {}
+          spec:
+            providerConfigRef: {kind: ProviderConfig, name: sub-a}
+            forProvider:
+              location: westeurope
+              resourceGroupName: rg
+              subnetId: ${env.data.subnetId}
+              privateServiceConnection:
+                name: psc
+                isManualConnection: false
+                privateConnectionResourceId: /subscriptions/0/x
+                subresourceNames: [blob]
+  - step: auto-ready
+    functionRef: {name: function-auto-ready}

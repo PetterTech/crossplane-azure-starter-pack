@@ -1,0 +1,132 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata: {name: svc-resolver}
+spec:
+  compositeTypeRef: {apiVersion: spike.a5n.io/v1alpha1, kind: Svc}
+  mode: Pipeline
+  pipeline:
+  - step: environment
+    functionRef: {name: function-environment-configs}
+    input:
+      apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+      kind: Input
+      spec:
+        environmentConfigs:
+        - type: Reference
+          ref: {name: platform-environment}
+  - step: kro
+    functionRef: {name: function-kro}
+    input:
+      apiVersion: kro.fn.crossplane.io/v1alpha1
+      kind: ResourceGraph
+      status:
+        peName: ${pe.metadata.name}
+      resources:
+      - id: xr
+        externalRef:
+          apiVersion: spike.a5n.io/v1alpha1
+          kind: Svc
+          metadata:
+            name: ${schema.metadata.name}
+            namespace: ${schema.metadata.namespace}
+      - id: main
+        readyWhen:
+        - ${main.data.kind == "main"}
+        template:
+          apiVersion: v1
+          kind: ConfigMap
+          metadata: {}
+          data:
+            kind: main
+            sub: ${xr.status.subscription}
+      - id: pe
+        includeWhen:
+        - ${schema.spec.networking == "private"}
+        template:
+          apiVersion: network.azure.m.upbound.io/v1beta1
+          kind: PrivateEndpoint
+          metadata: {}
+          spec:
+            providerConfigRef: {kind: ProviderConfig, name: "${xr.status.subscription}"}
+            forProvider:
+              location: westeurope
+              resourceGroupName: rg
+              subnetId: /subscriptions/0/subnets/x
+              privateServiceConnection:
+                name: psc
+                isManualConnection: false
+                privateConnectionResourceId: /subscriptions/0/x
+                subresourceNames: [blob]
+  - step: resolver
+    functionRef: {name: function-go-templating}
+    input:
+      apiVersion: gotemplating.fn.crossplane.io/v1beta1
+      kind: GoTemplate
+      source: Inline
+      inline:
+        template: |
+          {{- $xr := .observed.composite.resource -}}
+          {{- $st := $xr.status | default dict -}}
+          {{- $subs := list -}}{{- $er := .extraResources | default dict -}}
+          {{- if hasKey $er "subs" }}{{ range $i := (get $er "subs").items }}{{ $subs = append $subs $i.resource }}{{ end }}{{ end -}}
+          {{- $second := hasKey $er "subs" -}}
+          {{- $subs = $subs | default list -}}
+          {{- $pinned := get $st "subscription" | default "" -}}
+          {{- $want := get $xr.spec "subscription" | default "" -}}
+          {{- $names := list -}}{{- range $s := $subs }}{{ $names = append $names (printf "%s/%s" $s.metadata.namespace $s.metadata.name) }}{{ end -}}
+          {{- $chosen := dict -}}
+          {{- $ready := list -}}
+          {{- range $s := $subs -}}
+            {{- $ok := false -}}
+            {{- range $c := (get ($s.status | default dict) "conditions" | default list) -}}
+              {{- if and (eq $c.type "Ready") (eq $c.status "True") }}{{ $ok = true }}{{ end -}}
+            {{- end -}}
+            {{- if and $ok (not (get $s.metadata "deletionTimestamp")) }}{{ $ready = append $ready $s }}{{ end -}}
+          {{- end -}}
+          {{- if $pinned -}}
+            {{- range $s := $subs -}}{{- if eq $s.metadata.name $pinned }}{{ $chosen = $s }}{{ end -}}{{- end -}}
+            {{- if and $second (not $chosen) -}}{{ fail (printf "SubscriptionChanged: pinned %s not found" $pinned) }}{{- end -}}
+            {{- if and $chosen (ne $chosen.metadata.uid (get $st "subscriptionUid")) -}}{{ fail (printf "SubscriptionChanged: uid of %s differs from pin" $pinned) }}{{- end -}}
+          {{- else if $want -}}
+            {{- range $s := $ready -}}{{- if eq $s.metadata.name $want }}{{ $chosen = $s }}{{ end -}}{{- end -}}
+          {{- else if eq (len $ready) 1 -}}
+            {{- $chosen = index $ready 0 -}}
+          {{- end -}}
+          ---
+          apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+          kind: ExtraResources
+          requirements:
+            subs:
+              apiVersion: spike.a5n.io/v1alpha1
+              kind: Sub
+              namespace: {{ $xr.metadata.namespace }}
+              matchLabels:
+                spike.a5n.io/subscription: "true"
+          ---
+          apiVersion: spike.a5n.io/v1alpha1
+          kind: Svc
+          status:
+            marker: "subs={{ len $subs }} ready={{ len $ready }}"
+          {{- if $chosen }}
+            subscription: {{ $chosen.metadata.name }}
+            subscriptionUid: {{ $chosen.metadata.uid }}
+            subscriptionId: {{ get ($chosen.status | default dict) "subscriptionId" | default "" | quote }}
+          ---
+          apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+          kind: ClaimConditions
+          conditions:
+          - {type: SubscriptionResolved, status: "True", reason: Resolved, target: Composite}
+          {{- else }}
+          {{ if $second }}{{ fail (printf "SubscriptionResolved=False: set spec.subscription (candidates: %s)" $names) }}{{ end }}
+          ---
+          apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+          kind: ClaimConditions
+          conditions:
+          - type: SubscriptionResolved
+            status: "False"
+            reason: NotResolved
+            target: Composite
+            message: {{ printf "set spec.subscription; subs=%s ready=%d" $names (len $ready) | quote }}
+          {{- end }}
+  - step: auto-ready
+    functionRef: {name: function-auto-ready}

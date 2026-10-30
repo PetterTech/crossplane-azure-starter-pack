@@ -34,6 +34,10 @@ Reconcile 1 only pins the Subscription and the environment. From the second, the
 
 A private account without a valid `subnetId` (missing, placeholder or malformed) fails closed: the resolver result is Fatal with `SubnetNotConfigured` (visible in the `Synced` message), nothing is composed or pinned, and `Ready` is not reported (it would otherwise be True with nothing composed). It composes once the platform sets the subnet. A pinned account whose subnet later disappears from the environment keeps its endpoint and reports drift (`EnvironmentDrift`); a public account flipped to private gets no endpoint and `EnvironmentValid=False`, while public access is switched off.
 
+## Private endpoint subnet
+
+`parameters.privateEndpointSubnetId` (immutable, `networking: private` only) puts the private endpoint in a subnet you name, which is how a `LandingZone` places it in its own virtual network (`docs/apis/landingzone.md`). The platform's shared subnet is rejected (`PrivateEndpointSubnetNotAllowed`). The identity of the subscription needs the subnet-join right on that subnet (E13); the platform pre-grants none for tenant-supplied subnets.
+
 ## Private DNS (known gap)
 
 The composition creates no private DNS zone group, because the EnvironmentConfig contract has no zone-ID key. Without a zone group the blob name does not resolve to the private IP, and the public name is blocked by the firewall: private accounts fail closed (403 by name) until an Azure Policy (DeployIfNotExists) or a future optional environment key supplies the zone group. Plan for this before relying on private accounts.

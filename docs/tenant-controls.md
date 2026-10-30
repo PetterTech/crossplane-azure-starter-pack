@@ -57,5 +57,7 @@ After the first sandbox subscription is vended and a VirtualNetwork is Ready, ch
 - **Redundancy.** LRS and ZRS are single-region. Geo-redundancy is the caller's choice.
 - **Encryption keys.** Customer-managed keys are not offered; platform-managed keys apply (E14).
 - **Subnet join (E13).** The per-subscription UAMI needs a custom role with only `Microsoft.Network/virtualNetworks/subnets/join/action`, at scope of the platform subnet and granted by the identity-admin gate (see `docs/identity-bootstrap.md`). Without it private endpoint creation fails closed (403). Blast radius: any shared-tier pod token can attach endpoints to the shared subnet and exhaust its IPs.
+  - **Subnet policy.** Set `privateEndpointNetworkPolicies` on the shared platform subnet deliberately: `Enabled` (or `NetworkSecurityGroupEnabled`) applies NSGs/UDRs to private endpoint traffic; `Disabled` bypasses them. Choose per your network policy and document it with the subnet.
+  - **Quota and monitoring.** Limit IP exhaustion with a per-namespace `ResourceQuota` on `count/storageaccounts.platform.a5n.io` (e.g. `hard: {count/storageaccounts.platform.a5n.io: "5"}`), and monitor free IPs in the subnet, alerting well before it is full. Size the subnet for quota × namespaces plus headroom.
 
 After the first sandbox deploy, check that Defender for Cloud shows no new storage findings.

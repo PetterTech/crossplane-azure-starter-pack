@@ -1,0 +1,326 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: containerapps.platform.a5n.io
+spec:
+  scope: Namespaced
+  group: platform.a5n.io
+  names:
+    kind: ContainerApp
+    plural: containerapps
+    singular: containerapp
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      additionalPrinterColumns:
+        - name: SUBSCRIPTION
+          type: string
+          jsonPath: .status.subscription
+        - name: LOCATION
+          type: string
+          jsonPath: .status.environment.location
+        - name: APP
+          type: string
+          jsonPath: .status.appName
+        - name: INGRESS
+          type: string
+          jsonPath: .spec.parameters.ingress
+        - name: URL
+          type: string
+          jsonPath: .status.url
+        - name: READY
+          type: string
+          jsonPath: .status.conditions[?(@.type=='Ready')].status
+        - name: SYNCED
+          type: string
+          jsonPath: .status.conditions[?(@.type=='Synced')].status
+        - name: AGE
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: >-
+            An Azure Container App in its own dedicated Container Apps environment, serving HTTP from a
+            public container image. Secure by default: the environment has no public network access, the
+            ingress is internal (not reachable from the Internet), HTTP is redirected to HTTPS, and the
+            image must be pinned by a tag other than latest or by digest. With networking private (the
+            default) and no infrastructureSubnetId the platform adds a private endpoint for the environment
+            in the platform subnet; with infrastructureSubnetId the environment is injected into that
+            dedicated subnet instead. The platform configures no secrets, registry credentials, role
+            assignments or log destination. The subscription, the tenant, the default region and the
+            default resource group come from the platform EnvironmentConfig, never from this spec.
+            Condition Ready=True means the environment, the app and, when composed, its private endpoint exist.
+          required:
+            - spec
+          properties:
+            spec:
+              type: object
+              description: Desired container app. Only parameters.image is required.
+              required:
+                - parameters
+              x-kubernetes-validations:
+                - rule: "!has(oldSelf.subscription) || (has(self.subscription) && self.subscription == oldSelf.subscription)"
+                  message: "spec.subscription can't be changed once set. Create a new ContainerApp instead."
+                - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.location) || (has(self.parameters) && has(self.parameters.location) && self.parameters.location == oldSelf.parameters.location)"
+                  message: "spec.parameters.location can't be changed once set. Create a new ContainerApp instead."
+                - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.resourceGroupName) || (has(self.parameters) && has(self.parameters.resourceGroupName) && self.parameters.resourceGroupName == oldSelf.parameters.resourceGroupName)"
+                  message: "spec.parameters.resourceGroupName can't be changed once set. Create a new ContainerApp instead."
+                - rule: "(has(self.parameters) && has(self.parameters.name)) == (has(oldSelf.parameters) && has(oldSelf.parameters.name)) && (!(has(oldSelf.parameters) && has(oldSelf.parameters.name)) || self.parameters.name == oldSelf.parameters.name)"
+                  message: "spec.parameters.name can't be added, changed or removed after creation. Create a new ContainerApp instead."
+                - rule: "(has(self.parameters) && has(self.parameters.infrastructureSubnetId)) == (has(oldSelf.parameters) && has(oldSelf.parameters.infrastructureSubnetId)) && (!(has(oldSelf.parameters) && has(oldSelf.parameters.infrastructureSubnetId)) || self.parameters.infrastructureSubnetId == oldSelf.parameters.infrastructureSubnetId)"
+                  message: "spec.parameters.infrastructureSubnetId can't be added, changed or removed after creation; Azure fixes the environment's network at creation. Create a new ContainerApp instead."
+                - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.networking) || (has(self.parameters) && has(self.parameters.networking) && self.parameters.networking == oldSelf.parameters.networking)"
+                  message: "spec.parameters.networking can't be changed once set. Create a new ContainerApp instead."
+                - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.zoneRedundant) || (has(self.parameters) && has(self.parameters.zoneRedundant) && self.parameters.zoneRedundant == oldSelf.parameters.zoneRedundant)"
+                  message: "spec.parameters.zoneRedundant can't be changed once set; Azure fixes it at creation. Create a new ContainerApp instead."
+              properties:
+                subscription:
+                  type: string
+                  description: >-
+                    Name of a Subscription in this namespace that the resources are created in. Optional.
+                    If omitted, the platform uses the namespace's only Ready Subscription. If the namespace
+                    has none or more than one, no resources are created and the SubscriptionResolved condition
+                    explains why. Set this field to choose explicitly. The resolved name is recorded in
+                    status.subscription and never changes afterwards. It can't be changed once set; to move,
+                    create a new resource.
+                  maxLength: 63
+                  pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                deletionPolicy:
+                  type: string
+                  description: >-
+                    What happens in Azure when this resource is deleted. Orphan (default): the container app
+                    and its environment stay in Azure, and only the Kubernetes objects and the private endpoint
+                    are removed. Delete: the app, the environment and the private endpoint are deleted in
+                    Azure. A new resource with the same name in the same namespace and Subscription derives
+                    the same names and adopts orphaned resources unless parameters.name is set.
+                  enum: [Delete, Orphan]
+                  default: Orphan
+                parameters:
+                  type: object
+                  description: Settings of the container app.
+                  x-kubernetes-validations:
+                    - rule: "!(has(self.ingress) && self.ingress == 'external') || (has(self.networking) && self.networking == 'public')"
+                      message: "ingress external requires networking public. A private environment can't be reached from the Internet."
+                    - rule: "!(has(self.zoneRedundant) && self.zoneRedundant) || has(self.infrastructureSubnetId)"
+                      message: "zoneRedundant requires infrastructureSubnetId; Azure supports zone redundancy only for environments injected into a virtual network."
+                    - rule: "!(has(self.minReplicas) && has(self.maxReplicas)) || self.minReplicas <= self.maxReplicas"
+                      message: "minReplicas can't be greater than maxReplicas."
+                  required:
+                    - image
+                  properties:
+                    name:
+                      type: string
+                      description: >-
+                        Container app name in Azure. 2 to 32 lowercase letters, digits and hyphens; starts
+                        with a letter, ends with a letter or digit, no two hyphens in a row. Optional; the
+                        platform derives a name from the namespace and the name of this resource. The
+                        environment is named <name>-env. Can't be changed after creation.
+                      minLength: 2
+                      maxLength: 32
+                      pattern: "^[a-z]([a-z0-9]|-[a-z0-9])*$"
+                    location:
+                      type: string
+                      description: >-
+                        Azure region. Optional; defaults to the platform default region. The platform may
+                        restrict the allowed regions (EnvironmentValid=False, reason LocationNotAllowed).
+                        Recorded in status.environment on first use and can't be changed afterwards.
+                      pattern: "^[a-z][a-z0-9]*$"
+                      maxLength: 40
+                    resourceGroupName:
+                      type: string
+                      description: >-
+                        Resource group for the app and its environment. Optional; defaults to the platform
+                        default resource group. Recorded in status.environment on first use and can't be
+                        changed afterwards.
+                      pattern: "^[a-zA-Z0-9._()-]*[a-zA-Z0-9_()-]$"
+                      minLength: 1
+                      maxLength: 90
+                    image:
+                      type: string
+                      description: >-
+                        Public container image that serves HTTP on targetPort, for example
+                        ghcr.io/pettertech/hello-api:1.4.2 or ghcr.io/pettertech/hello-api@sha256:<digest>.
+                        Required, there is no default. It must be pinned: a tag other than latest, or a
+                        digest (preferred, since tags can move). Private registries and registry credentials
+                        are not supported. Changing the image creates a new revision.
+                      minLength: 3
+                      maxLength: 255
+                      pattern: "^[a-z0-9]([a-zA-Z0-9._:/@-]*[a-zA-Z0-9])?$"
+                      x-kubernetes-validations:
+                        - rule: "!self.endsWith(':latest')"
+                          message: "image must not use the :latest tag. Pin a version tag or a digest."
+                        - rule: "self.contains('@sha256:') || self.split('/')[size(self.split('/')) - 1].contains(':')"
+                          message: "image must have a tag or a digest; a reference without one resolves to latest."
+                    targetPort:
+                      type: integer
+                      description: HTTP port the container listens on.
+                      minimum: 1
+                      maximum: 65535
+                      default: 8080
+                    ingress:
+                      type: string
+                      description: >-
+                        internal (default): the app is reachable only from inside its environment's network
+                        (the private endpoint or the injected virtual network). external: the app gets a
+                        public address on the Internet; this requires networking public and is the
+                        explicit opt-in to exposing the app. Traffic is always HTTPS; plain HTTP is
+                        redirected.
+                      enum: [internal, external]
+                      default: internal
+                    networking:
+                      type: string
+                      description: >-
+                        private (default): the environment has no public network access. Without
+                        infrastructureSubnetId the platform creates a private endpoint for the environment
+                        in the platform subnet; this needs a subnet in the platform EnvironmentConfig,
+                        otherwise nothing is created and the EnvironmentValid condition explains why. With
+                        infrastructureSubnetId the environment uses an internal load balancer in that
+                        subnet and no private endpoint is created. public: the environment accepts public
+                        traffic; the app is still only reachable from the Internet with ingress external.
+                        Private DNS for the environment's default domain is managed outside this API.
+                        Can't be changed after creation.
+                      enum: [private, public]
+                      default: private
+                    infrastructureSubnetId:
+                      type: string
+                      description: >-
+                        Azure resource ID of a dedicated subnet for the environment (virtual network
+                        injection). Optional. The subnet must be empty, delegated to
+                        Microsoft.App/environments and at least /23. The platform's shared private endpoint
+                        subnet can't be used. The platform grants no rights on it; the identity-admin
+                        gate must allow the subnet join first. Can't be added, changed or removed after
+                        creation.
+                      maxLength: 400
+                      pattern: "^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.Network/virtualNetworks/[^/]+/subnets/[^/]+$"
+                    size:
+                      type: string
+                      description: >-
+                        CPU and memory of each replica. small: 0.25 vCPU and 0.5 GiB (default).
+                        medium: 0.5 vCPU and 1 GiB. large: 1 vCPU and 2 GiB.
+                      enum: [small, medium, large]
+                      default: small
+                    minReplicas:
+                      type: integer
+                      description: >-
+                        Replicas that always run, 0 to 10. 1 (default) keeps the app warm; 0 scales to zero
+                        and cold-starts on the first request.
+                      minimum: 0
+                      maximum: 10
+                      default: 1
+                    maxReplicas:
+                      type: integer
+                      description: Most replicas the app scales out to, 1 to 10. Default 3. Scaling is on concurrent HTTP requests.
+                      minimum: 1
+                      maximum: 10
+                      default: 3
+                    identity:
+                      type: string
+                      description: >-
+                        none (default), or system for a system-assigned managed identity that is deleted with
+                        the app. Its principal ID is in status.principalId. The platform creates no role
+                        assignments; the platform team grants roles outside this API. The spec holds no
+                        secrets.
+                      enum: [none, system]
+                      default: none
+                    zoneRedundant:
+                      type: boolean
+                      description: >-
+                        Spread the environment across availability zones. Default false. Needs
+                        infrastructureSubnetId and a region with availability zones. Costs more (a larger
+                        minimum footprint) and can't be changed after creation.
+                      default: false
+                    tags:
+                      type: object
+                      description: >-
+                        Tags added to the app, the environment and the private endpoint. Only costCenter,
+                        owner and environment are allowed (at most 10 entries, values up to 256
+                        characters). The platform adds the a5n- tags itself; the a5n- prefix is reserved.
+                      maxProperties: 10
+                      additionalProperties:
+                        type: string
+                        maxLength: 256
+                      x-kubernetes-validations:
+                        - rule: "self.all(k, k in ['costCenter', 'owner', 'environment'])"
+                          message: "Allowed tag keys: costCenter, owner, environment."
+            status:
+              type: object
+              description: >-
+                Observed state, written by the platform. The pinned values (subscription, subscriptionUid,
+                subscriptionId, environment, appName and environmentName) are written once and can't be changed
+                or removed afterwards, even by administrators; a tampered resource is recovered by deleting
+                it. Conditions (Ready, Synced, SubscriptionResolved, EnvironmentValid, EnvironmentDrift) are
+                managed by the platform and Crossplane and are not declared here. Tenants have no write
+                access to status.
+              x-kubernetes-validations:
+                - rule: "!has(oldSelf.subscription) || (has(self.subscription) && self.subscription == oldSelf.subscription)"
+                  message: "status.subscription is write-once."
+                - rule: "!has(oldSelf.subscriptionUid) || (has(self.subscriptionUid) && self.subscriptionUid == oldSelf.subscriptionUid)"
+                  message: "status.subscriptionUid is write-once."
+                - rule: "!has(oldSelf.subscriptionId) || (has(self.subscriptionId) && self.subscriptionId == oldSelf.subscriptionId)"
+                  message: "status.subscriptionId is write-once."
+                - rule: "!has(oldSelf.appName) || (has(self.appName) && self.appName == oldSelf.appName)"
+                  message: "status.appName is write-once."
+                - rule: "!has(oldSelf.environmentName) || (has(self.environmentName) && self.environmentName == oldSelf.environmentName)"
+                  message: "status.environmentName is write-once."
+                - rule: "!has(oldSelf.environment) || (has(self.environment) && self.environment == oldSelf.environment)"
+                  message: "status.environment is write-once."
+              properties:
+                subscription:
+                  type: string
+                  description: Name of the Subscription the resources are created in, recorded once and never re-resolved.
+                subscriptionUid:
+                  type: string
+                  description: Kubernetes UID of that Subscription. Detects deleting and recreating a Subscription with the same name.
+                subscriptionId:
+                  type: string
+                  description: Azure subscription ID (GUID) of that Subscription.
+                environment:
+                  type: object
+                  description: >-
+                    Effective environment values recorded once, as a whole, when the container app was
+                    first composed. Later changes to the EnvironmentConfig do not move existing resources;
+                    the EnvironmentDrift condition reports the difference.
+                  properties:
+                    location:
+                      type: string
+                      description: Azure region in use.
+                    resourceGroupName:
+                      type: string
+                      description: Resource group in use.
+                    subnetId:
+                      type: string
+                      description: >-
+                        Platform subnet of the EnvironmentConfig at first composition, if the platform had one.
+                        The private endpoint is composed from this value when it is needed.
+                    tenantId:
+                      type: string
+                      description: Entra tenant of the EnvironmentConfig at first composition.
+                appName:
+                  type: string
+                  description: Name of the container app in Azure, recorded once and never changed afterwards.
+                environmentName:
+                  type: string
+                  description: Name of the Container Apps environment in Azure (<appName>-env), recorded once and never changed afterwards.
+                resourceId:
+                  type: string
+                  description: Azure resource ID of the container app.
+                environmentId:
+                  type: string
+                  description: Azure resource ID of the Container Apps environment.
+                defaultDomain:
+                  type: string
+                  description: Default domain of the environment. With networking private it resolves only through private DNS managed outside this API.
+                fqdn:
+                  type: string
+                  description: Fully qualified domain name of the app's ingress.
+                url:
+                  type: string
+                  description: HTTPS URL of the app (https://<fqdn>). Reachable from the Internet only with ingress external.
+                principalId:
+                  type: string
+                  description: Object ID of the system-assigned identity. Set only with identity system.
+                privateEndpointId:
+                  type: string
+                  description: Azure resource ID of the private endpoint. Set once it exists; only without infrastructureSubnetId and with networking private.

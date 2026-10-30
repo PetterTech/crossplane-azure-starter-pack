@@ -1,0 +1,44 @@
+apiVersion: platform.a5n.io/v1alpha1
+kind: ContainerApp
+metadata:
+  name: pettertech-api
+  namespace: pettertech-sandbox
+spec:
+  # Public, with an Internet-facing ingress (explicit opt-in), a digest-pinned image and
+  # two to five replicas. The defaults are private, internal ingress and one replica.
+  subscription: pettertech-sandbox
+  parameters:
+    image: ghcr.io/pettertech/hello-api@sha256:3f1c9a7e5b2d48c6a0e9d1f47b8c2a6e5d0f9b3c71a4e8d2c6b0f5a9e3d71c48
+    targetPort: 3000
+    networking: public
+    ingress: external
+    size: medium
+    minReplicas: 2
+    maxReplicas: 5
+    identity: system
+    tags:
+      costCenter: "0000"
+      owner: platform-team@example.com
+      environment: sandbox
+---
+# Private with VNet injection into a dedicated, delegated /23 subnet and zone redundancy.
+apiVersion: platform.a5n.io/v1alpha1
+kind: ContainerApp
+metadata:
+  name: pettertech-worker
+  namespace: pettertech-sandbox
+spec:
+  parameters:
+    image: ghcr.io/pettertech/hello-api:1.4.2
+    infrastructureSubnetId: /subscriptions/<subscription-id>/resourceGroups/rg-pettertech-sandbox/providers/Microsoft.Network/virtualNetworks/vnet-pettertech-sandbox/subnets/snet-containerapps
+    zoneRedundant: true
+---
+# Minimal: only the image. Private, internal ingress, one small replica, no identity.
+apiVersion: platform.a5n.io/v1alpha1
+kind: ContainerApp
+metadata:
+  name: pettertech-minimal
+  namespace: pettertech-sandbox
+spec:
+  parameters:
+    image: ghcr.io/pettertech/hello-api:1.4.2

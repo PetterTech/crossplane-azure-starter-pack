@@ -36,40 +36,11 @@ After the first sandbox subscription is vended, check that the Defender plans ar
 
 `VirtualNetwork` (`docs/apis/virtualnetwork.md`) creates a VNet, one subnet and an NSG. These controls are prerequisites, not shipped policy.
 
-- **Flow logs and NSG diagnostic settings.** Not composed (accepted exception E8, V2). Enable NSG flow logs or VNet flow logs through Network Watcher, and diagnostic settings on the NSG, from the management group.
-- **DDoS protection.** Not composed (accepted exception E8, V5). Add a DDoS protection plan or IP protection where the workload is Internet-facing.
-- **Backstop policies.** Assign at the management group: "Subnets should be associated with a Network Security Group" and "Network Watcher should be enabled".
-- **Azure Firewall / NVA.** Not composed. The platform hub is the central control point for egress and inspection.
-- **Tenant rights.** Tenants have no RBAC to add subnets or NSGs, so the VNet's single subnet and NSG are the only ones in the tenant namespace's path.
-
-After the first sandbox subscription is vended and a VirtualNetwork is Ready, check that Defender for Cloud reports no unaddressed recommendations for the VNet, subnet and NSG.
-
-## Storage baseline
-
-`StorageAccount` (`docs/apis/storageaccount.md`) creates a storage account, containers and, when private, private endpoints. These controls are prerequisites, not shipped policy.
-
-- **Private DNS.** Create the zones `privatelink.blob.core.windows.net` and `privatelink.file.core.windows.net`, and assign the Azure Policy "Configure Storage accounts to use private DNS zones" (DeployIfNotExists) at the management group. Until then private accounts are unreachable by name and fail closed (403). Follow-up D6: an optional environment key for zone IDs.
-- **Defender for Storage.** Enable the plan (malware scanning, sensitive data threat detection).
-- **Diagnostic settings.** Assign a DeployIfNotExists policy that sends blob, file, queue and table logs, plus the activity log, to Log Analytics.
-- **Backstop policies.** Audit or deny public network access and shared key access.
-- **Network access.** `networking: public` raises the Defender recommendation "Storage accounts should restrict network access". Any use needs a recorded exception.
-- **Opt-outs.** `softDeleteDays` and `versioning: false` opt-outs raise BR-1 findings.
-- **Redundancy.** LRS and ZRS are single-region. Geo-redundancy is the caller's choice.
-- **Encryption keys.** Customer-managed keys are not offered; platform-managed keys apply (E14).
-- **Subnet join (E13).** The per-subscription UAMI needs a custom role with only `Microsoft.Network/virtualNetworks/subnets/join/action`, at scope of the platform subnet and granted by the identity-admin gate (see `docs/identity-bootstrap.md`). Without it private endpoint creation fails closed (403). Blast radius: any shared-tier pod token can attach endpoints to the shared subnet and exhaust its IPs.
-  - **Subnet policy.** Set `privateEndpointNetworkPolicies` on the shared platform subnet deliberately: `Enabled` (or `NetworkSecurityGroupEnabled`) applies NSGs/UDRs to private endpoint traffic; `Disabled` bypasses them. Choose per your network policy and document it with the subnet.
-  - **Quota and monitoring.** Limit IP exhaustion with a per-namespace `ResourceQuota` on `count/storageaccounts.platform.a5n.io` (e.g. `hard: {count/storageaccounts.platform.a5n.io: "5"}`), and monitor free IPs in the subnet, alerting well before it is full. Size the subnet for quota × namespaces plus headroom.
-
-After the first sandbox deploy, check that Defender for Cloud shows no new storage findings.
-
-## Key Vault baseline
-
-`KeyVault` (`docs/apis/keyvault.md`) creates a vault with Azure RBAC authorization and purge protection and, when private, a private endpoint (group `vault`). These controls are prerequisites, not shipped policy. Keldorn conditions to follow.
-
-- **Defender for Key Vault.** Enable the plan (E8, K5) at subscription level.
-- **Diagnostic settings.** Not part of the XR. Assign a DeployIfNotExists policy that sends the `AuditEvent` logs to Log Analytics (K1).
-- **Backstop policies.** Audit or deny: purge protection off, access policy (non-RBAC) authorization, and public network access on, "Key vaults should have firewall enabled".
-- **Private DNS.** Create the zone `privatelink.vaultcore.azure.net` and assign the Azure Policy "Configure Azure Key Vaults with private endpoints" / private DNS zone DeployIfNotExists at the management group. Until then private vaults are unreachable by name (D6).
-- **Data-plane roles.** The platform grants roles (for example Key Vault Secrets User) outside this API, because Contributor cannot assign roles (E1).
-- **Subnet join (E13).** The same subnet-join custom role applies to the vault private endpoint, with the same blast radius, quota (`count/keyvaults.platform.a5n.io`) and subnet policy notes as for storage.
-- **Purge protection.** Deleting a vault leaves it soft-deleted and its name reserved for up to 90 days; platform admins cannot purge it earlier.
+- **Defender for Key Vault.** Enable the plan "Microsoft Defender for Key Vaults" on the subscription (E8, K5), inherited via the management group by DeployIfNotExists. After the first sandbox deploy, treat the Defender recommendations as ground truth.
+- **Diagnostic settings.** Not part of the XR. Assign the built-in policy "Deploy Diagnostic Settings for Key Vault to Log Analytics workspace" (DeployIfNotExists) with the categories `AuditEvent` and `AzurePolicyEvaluationDetails` plus `AllMetrics`, sent to Log Analytics (K1). Keep audit logs for at least 1 year.
+- **Backstop policies.** Assign (audit or deny): "Key vaults should have soft delete enabled", "Azure Key Vault should use RBAC permission model", "Azure Key Vault should disable public network access", "Azure Key Vaults should use private link", and "Keys should have an expiration date" / "Secrets should have an expiration date".
+- **Private DNS.** Create the zone `privatelink.vaultcore.azure.net` and assign the Azure Policy "Configure Azure Key Vaults with private endpoints" / private DNS zone DeployIfNotExists at the management group. Until then private vaults are unreachable by name (D6). Defender raises "Private endpoint should be configured for Key Vault" only if the endpoint is missing.
+- **Data-plane roles.** The platform team assigns them outside this API (least privilege, for example Key Vault Secrets User or Key Vault Crypto User), because Contributor cannot assign roles (E1). A new vault is empty and unusable until someone does.
+- **Accepted gaps.** Customer-managed keys and HSM are not offered (E14) and the SKU is fixed at standard; Premium and Managed HSM are out of scope.
+- **Subnet join (E13).** The same subnet-join custom role applies to the vault private endpoint, with the same blast radius, quota (`count/keyvaults.platform.a5n.io`, e.g. `hard: {count/keyvaults.platform.a5n.io: "5"}`, illustrative) and subnet policy notes as for storage.
+- **Purge protection.** Not toggleable: it cannot be turned off in this API. Deleting a vault leaves it soft-deleted and its name reserved for up to 90 days; platform admins cannot purge it earlier.

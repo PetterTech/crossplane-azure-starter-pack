@@ -43,7 +43,7 @@ The composition creates no private DNS zone group, because the EnvironmentConfig
 `spec.deletionPolicy` is `Orphan` (default) or `Delete`, as for the Subscription (`managementPolicies` without `Delete`; `.m` MRs have no `deletionPolicy`).
 
 - `Orphan`: deleting the resource leaves the vault, with its secrets, keys and certificates, in Azure. The private endpoint is removed. Nobody manages the vault afterwards.
-- `Delete`: the vault is deleted. Purge protection is on, so it stays soft-deleted for `softDeleteDays` (up to 90 days), its name stays reserved and nobody can purge it earlier. Re-creating a vault with the same name fails until the retention ends, or the soft-deleted vault is recovered in Azure.
+- `Delete`: the vault is deleted. Purge protection is on, so it stays soft-deleted for `softDeleteDays` (up to 90 days), its name stays reserved and nobody can purge it earlier. Re-creating a vault with the same name may fail until the retention ends; azurerm may instead auto-recover a soft-deleted vault of the same name (`recover_soft_deleted_key_vaults` defaults to true), which acts as an adoption path. Real behaviour is unverified until the sandbox deploy.
 - Adoption by name: the derived vault name depends only on the namespace, the resource name and the Subscription. Re-creating a resource with the same name derives the same vault name and adopts an orphaned vault with its contents and settings. Set `parameters.name` to pick another, or delete the leftover vault first.
 
 ## Hardening
@@ -80,6 +80,7 @@ The composition creates no private DNS zone group, because the EnvironmentConfig
 - Authorization: Azure RBAC only; no access policies, no bypass for Azure services.
 - Cross-subscription private endpoint: the endpoint joins the platform subnet, which lives outside the tenant Subscription (E13). The per-subscription identity needs the subnet-join role there; without it the create fails closed with 403.
 - Data loss: soft delete and purge protection (not toggleable) limit damage from deletes; there is no ManagementLock, so deleting the XR with `deletionPolicy: Delete` deletes the vault (recoverable for the retention period) and `Orphan` leaves it unmanaged.
+- Expiry dates and rotation of keys and secrets are tenant responsibilities (data-plane); Defender flags them and the Azure Policy expiry audits cover them.
 - A tenant cannot choose the subnet, tenant, region default or resource group default; they come from the EnvironmentConfig (and the location only from the allowed list).
 - Fail closed: unresolved subscription, environment or location is Fatal and stops composition.
 
@@ -92,7 +93,7 @@ The composition creates no private DNS zone group, because the EnvironmentConfig
 - Live behaviour of `Orphan` and `Delete` against a real provider with purge protection (only the policy lists were verified, on kind).
 - Stability of `random.seededString` across function-kro upgrades; a changed derivation would not move the existing vault, because `crossplane.io/external-name` is pinned in `status.vaultName`, but would change it for new ones.
 - A Fatal result keeping the composed resources live (shown under render only).
-- A soft-deleted vault of the same name blocking re-creation.
+- A soft-deleted vault of the same name blocking re-creation, or being auto-recovered by azurerm (`recover_soft_deleted_key_vaults`).
 
 ## Tests
 

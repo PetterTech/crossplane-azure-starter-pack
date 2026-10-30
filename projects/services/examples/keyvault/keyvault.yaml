@@ -1,0 +1,26 @@
+apiVersion: platform.a5n.io/v1alpha1
+kind: KeyVault
+metadata:
+  name: pettertech-secrets
+  namespace: pettertech-sandbox
+spec:
+  # Public with an IP allowlist; the default is private with a private endpoint.
+  # subscription is optional when the namespace has exactly one Ready Subscription.
+  subscription: pettertech-sandbox
+  parameters:
+    networking: public
+    allowedIpRanges:
+      - 203.0.113.0/24
+    softDeleteDays: 30
+    tags:
+      costCenter: "0000"
+      owner: platform-team@example.com
+      environment: sandbox
+---
+# Minimal: every field has a safe default (RBAC, purge protection, 90 days soft delete, private).
+apiVersion: platform.a5n.io/v1alpha1
+kind: KeyVault
+metadata:
+  name: pettertech-minimal
+  namespace: pettertech-sandbox
+spec: {}

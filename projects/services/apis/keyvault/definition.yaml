@@ -1,0 +1,229 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: keyvaults.platform.a5n.io
+spec:
+  scope: Namespaced
+  group: platform.a5n.io
+  names:
+    kind: KeyVault
+    plural: keyvaults
+    singular: keyvault
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      additionalPrinterColumns:
+        - name: SUBSCRIPTION
+          type: string
+          jsonPath: .status.subscription
+        - name: LOCATION
+          type: string
+          jsonPath: .status.environment.location
+        - name: VAULT
+          type: string
+          jsonPath: .status.vaultName
+        - name: NETWORKING
+          type: string
+          jsonPath: .spec.parameters.networking
+        - name: READY
+          type: string
+          jsonPath: .status.conditions[?(@.type=='Ready')].status
+        - name: SYNCED
+          type: string
+          jsonPath: .status.conditions[?(@.type=='Synced')].status
+        - name: AGE
+          type: date
+          jsonPath: .metadata.creationTimestamp
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: >-
+            An Azure Key Vault with hardened settings: Azure RBAC authorization (no access policies),
+            purge protection always on, soft delete, and no public network access unless networking is
+            explicitly set to public. With networking private (the default) the platform adds a private
+            endpoint for the vault in the platform subnet; the subnet, the tenant, the default region and
+            the default resource group come from the platform EnvironmentConfig, never from this spec.
+            The platform creates no role assignments: the vault has no data-plane access until the
+            platform team grants roles outside this API. Condition Ready=True means the vault and, when
+            private, its private endpoint exist.
+          properties:
+            spec:
+              type: object
+              description: Desired key vault. Every field is optional.
+              default: {}
+              x-kubernetes-validations:
+                - rule: "!has(oldSelf.subscription) || (has(self.subscription) && self.subscription == oldSelf.subscription)"
+                  message: "spec.subscription can't be changed once set. Create a new KeyVault instead."
+                - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.location) || (has(self.parameters) && has(self.parameters.location) && self.parameters.location == oldSelf.parameters.location)"
+                  message: "spec.parameters.location can't be changed once set. Create a new KeyVault instead."
+                - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.resourceGroupName) || (has(self.parameters) && has(self.parameters.resourceGroupName) && self.parameters.resourceGroupName == oldSelf.parameters.resourceGroupName)"
+                  message: "spec.parameters.resourceGroupName can't be changed once set. Create a new KeyVault instead."
+                - rule: "(has(self.parameters) && has(self.parameters.name)) == (has(oldSelf.parameters) && has(oldSelf.parameters.name)) && (!(has(oldSelf.parameters) && has(oldSelf.parameters.name)) || self.parameters.name == oldSelf.parameters.name)"
+                  message: "spec.parameters.name can't be added, changed or removed after creation. Create a new KeyVault instead."
+                - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.softDeleteDays) || (has(self.parameters) && has(self.parameters.softDeleteDays) && self.parameters.softDeleteDays == oldSelf.parameters.softDeleteDays)"
+                  message: "spec.parameters.softDeleteDays can't be changed once set; Azure fixes the retention period at creation. Create a new KeyVault instead."
+              properties:
+                subscription:
+                  type: string
+                  description: >-
+                    Name of a Subscription in this namespace that the resources are created in. Optional.
+                    If omitted, the platform uses the namespace's only Ready Subscription. If the namespace
+                    has none or more than one, no resources are created and the SubscriptionResolved condition
+                    explains why. Set this field to choose explicitly. The resolved name is recorded in
+                    status.subscription and never changes afterwards. It can't be changed once set; to move,
+                    create a new resource.
+                  maxLength: 63
+                  pattern: "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$"
+                deletionPolicy:
+                  type: string
+                  description: >-
+                    What happens in Azure when this resource is deleted. Orphan (default): the vault and its
+                    keys, secrets and certificates stay in Azure, and only the Kubernetes objects and the
+                    private endpoint are removed. Delete: the vault is deleted in Azure; because purge
+                    protection is always on, it stays soft-deleted for softDeleteDays, its name stays
+                    reserved and it can't be purged earlier (recover it in Azure, or wait). A new resource
+                    with the same name in the same namespace and Subscription derives the same vault name and
+                    adopts an orphaned vault unless parameters.name is set.
+                  enum: [Delete, Orphan]
+                  default: Orphan
+                parameters:
+                  type: object
+                  description: Settings of the key vault.
+                  default: {}
+                  x-kubernetes-validations:
+                    - rule: "!has(self.allowedIpRanges) || size(self.allowedIpRanges) == 0 || (has(self.networking) && self.networking == 'public')"
+                      message: "allowedIpRanges requires networking public."
+                  properties:
+                    name:
+                      type: string
+                      description: >-
+                        Key vault name in Azure (globally unique). 3 to 24 letters, digits and hyphens;
+                        starts with a letter, ends with a letter or digit, no two hyphens in a row.
+                        Optional; the platform derives a unique name from the namespace and the name of this
+                        resource. Can't be changed after creation.
+                      minLength: 3
+                      maxLength: 24
+                      pattern: "^[a-zA-Z]([a-zA-Z0-9]|-[a-zA-Z0-9])*$"
+                    location:
+                      type: string
+                      description: >-
+                        Azure region. Optional; defaults to the platform default region. The platform may
+                        restrict the allowed regions (EnvironmentValid=False, reason LocationNotAllowed).
+                        Recorded in status.environment on first use and can't be changed afterwards.
+                      pattern: "^[a-z][a-z0-9]*$"
+                      maxLength: 40
+                    resourceGroupName:
+                      type: string
+                      description: >-
+                        Resource group for the key vault. Optional; defaults to the platform default
+                        resource group. Recorded in status.environment on first use and can't be changed
+                        afterwards.
+                      pattern: "^[a-zA-Z0-9._()-]*[a-zA-Z0-9_()-]$"
+                      minLength: 1
+                      maxLength: 90
+                    networking:
+                      type: string
+                      description: >-
+                        private (default): public network access is disabled and the platform creates a
+                        private endpoint for the vault in the platform subnet; this needs a subnet in the
+                        platform EnvironmentConfig, otherwise nothing is created and the EnvironmentValid
+                        condition explains why. public: the vault is reachable from the Internet but the
+                        firewall denies everything except allowedIpRanges.
+                      enum: [private, public]
+                      default: private
+                    allowedIpRanges:
+                      type: array
+                      description: >-
+                        Public IPv4 addresses or CIDR ranges allowed through the key vault firewall. Only
+                        with networking public. At most 10. Empty means the firewall allows no one.
+                      maxItems: 10
+                      items:
+                        type: string
+                        maxLength: 18
+                        pattern: "^(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(\\.(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}(/(3[0-2]|[12]?[0-9]))?$"
+                        x-kubernetes-validations:
+                          - rule: "!self.contains('/') || int(self.split('/')[1]) >= 16"
+                            message: "allowedIpRanges prefixes must be /16 or narrower."
+                      x-kubernetes-list-type: set
+                    softDeleteDays:
+                      type: integer
+                      description: >-
+                        Days a deleted vault and its objects can be recovered, 7 to 90. Soft delete and purge
+                        protection are always on and can't be turned off. Azure fixes this value at creation,
+                        so it can't be changed afterwards.
+                      minimum: 7
+                      maximum: 90
+                      default: 90
+                    tags:
+                      type: object
+                      description: >-
+                        Tags added to the key vault. Only costCenter, owner and environment are allowed
+                        (at most 10 entries, values up to 256 characters). The platform adds the a5n- tags
+                        itself; the a5n- prefix is reserved.
+                      maxProperties: 10
+                      additionalProperties:
+                        type: string
+                        maxLength: 256
+                      x-kubernetes-validations:
+                        - rule: "self.all(k, k in ['costCenter', 'owner', 'environment'])"
+                          message: "Allowed tag keys: costCenter, owner, environment."
+            status:
+              type: object
+              description: >-
+                Observed state, written by the platform. The pinned values (subscription, subscriptionUid,
+                subscriptionId, environment and vaultName) are written once and can't be changed or removed afterwards,
+                even by administrators; a tampered resource is recovered by deleting it. Conditions
+                (Ready, Synced, SubscriptionResolved, EnvironmentValid, EnvironmentDrift) are managed by the
+                platform and Crossplane and are not declared here. Tenants have no write access to status.
+              x-kubernetes-validations:
+                - rule: "!has(oldSelf.subscription) || (has(self.subscription) && self.subscription == oldSelf.subscription)"
+                  message: "status.subscription is write-once."
+                - rule: "!has(oldSelf.subscriptionUid) || (has(self.subscriptionUid) && self.subscriptionUid == oldSelf.subscriptionUid)"
+                  message: "status.subscriptionUid is write-once."
+                - rule: "!has(oldSelf.subscriptionId) || (has(self.subscriptionId) && self.subscriptionId == oldSelf.subscriptionId)"
+                  message: "status.subscriptionId is write-once."
+                - rule: "!has(oldSelf.vaultName) || (has(self.vaultName) && self.vaultName == oldSelf.vaultName)"
+                  message: "status.vaultName is write-once."
+                - rule: "!has(oldSelf.environment) || (has(self.environment) && self.environment == oldSelf.environment)"
+                  message: "status.environment is write-once."
+              properties:
+                subscription:
+                  type: string
+                  description: Name of the Subscription the resources are created in, recorded once and never re-resolved.
+                subscriptionUid:
+                  type: string
+                  description: Kubernetes UID of that Subscription. Detects deleting and recreating a Subscription with the same name.
+                subscriptionId:
+                  type: string
+                  description: Azure subscription ID (GUID) of that Subscription.
+                environment:
+                  type: object
+                  description: >-
+                    Effective environment values recorded once, as a whole, when the key vault was
+                    first composed. Later changes to the EnvironmentConfig do not move existing resources;
+                    the EnvironmentDrift condition reports the difference.
+                  properties:
+                    location:
+                      type: string
+                      description: Azure region in use.
+                    resourceGroupName:
+                      type: string
+                      description: Resource group in use.
+                    subnetId:
+                      type: string
+                      description: >-
+                        Subnet of the EnvironmentConfig at first composition, if the platform had one. The
+                        private endpoint is composed from this value when networking is private.
+                vaultName:
+                  type: string
+                  description: Name of the key vault in Azure, recorded once and never changed afterwards.
+                resourceId:
+                  type: string
+                  description: Azure resource ID of the key vault.
+                privateEndpointId:
+                  type: string
+                  description: Azure resource ID of the private endpoint. Set once it exists; only when networking is private.
+                vaultUri:
+                  type: string
+                  description: Vault URI (https://<vaultName>.vault.azure.net/). With networking private it resolves to the private endpoint inside the virtual network only.

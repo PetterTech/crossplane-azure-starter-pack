@@ -8,6 +8,12 @@ spec:
     - type: xpkg
       xpkg:
         apiVersion: pkg.crossplane.io/v1
+        kind: Provider
+        package: xpkg.upbound.io/upbound/provider-family-azure
+        version: v2.8.0
+    - type: xpkg
+      xpkg:
+        apiVersion: pkg.crossplane.io/v1
         kind: Configuration
         package: ghcr.io/pettertech/crossplane-azure-starter-pack/foundation
         version: ">=v0.1.0 <v0.2.0"

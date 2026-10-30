@@ -17,3 +17,12 @@ spec:
       costCenter: "0000"
       owner: platform-team@example.com
       environment: sandbox
+---
+# Minimal: medium address space from the IPAM pool, one subnet, a deny-inbound NSG and hub peering.
+# subscription is optional when the namespace has exactly one Ready Subscription.
+apiVersion: platform.a5n.io/v1alpha1
+kind: VirtualNetwork
+metadata:
+  name: pettertech-minimal
+  namespace: pettertech-sandbox
+spec: {}

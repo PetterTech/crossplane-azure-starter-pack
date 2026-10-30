@@ -21,16 +21,16 @@ The old content stays untouched on `origin/javazone` (aa43faa) and `origin/nic` 
 | Provider pins `v2.7.1` (both) | Reconciled to the `v2.8.0` family pinned in `setup/providers.yaml`. |
 | `provider-azure-containerapp` for anything except ContainerApp | Kept only for ContainerApp. |
 
-## Kept, redesigned or pending migration
+## Kept or redesigned
 
 | Item | Where it goes | Status |
 |---|---|---|
-| StorageAccount, KeyVault, VirtualNetwork definitions and compositions (nic version) | `projects/services`, `projects/foundation` | Rebuilt in PRs 8-11, hardened per the plan |
-| ContainerApp (nic only) | `projects/services` | PR 12 |
-| LandingZone | `projects/landingzone` | PR 13; takes a typed `virtualNetwork` reference |
-| Subscription vending | `projects/foundation` | PR 8; redesigned around a user-assigned managed identity, the EnvironmentConfig and three bootstrap identities |
+| StorageAccount, KeyVault, VirtualNetwork definitions and compositions (nic version) | `projects/services`, `projects/foundation` | Rebuilt; see `docs/apis/` |
+| ContainerApp (nic only) | `projects/services` | Rebuilt; see `docs/apis/containerapp.md` |
+| LandingZone | `projects/landingzone` | Rebuilt; takes a typed `virtualNetwork` reference, see `docs/apis/landingzone.md` |
+| Subscription vending | `projects/foundation` | Rebuilt; redesigned around a user-assigned managed identity, the EnvironmentConfig and three bootstrap identities |
 | `function-go-templating` pipeline steps (nic: 15 pipeline steps, 4 of them go-templating, one each in containerapp, keyvault, storage, vnet; the nic subscription composition uses patch-and-transform + auto-ready) | patch-and-transform where possible, function-kro for conditional resources | Those 4 steps migrate away as their compositions are rebuilt; the pack keeps exactly one go-templating step, the shared subscription resolver (exception E6) |
 | `function-patch-and-transform` v0.8.2, `function-auto-ready` v0.5.0, `function-go-templating` v0.11.3 | `setup/functions.yaml` | Kept, bumped to the versions pinned there |
-| Demo app image `ghcr.io/pettertech/demo-app` | ContainerApp examples | Kept as the brand example |
+| Demo app image `ghcr.io/pettertech/demo-app` | ContainerApp examples | Replaced by the brand example image `ghcr.io/pettertech/hello-api` |
 
-Until each composition is rebuilt, the old files remain available only through the old branches; nothing on `main` references them.
+The old files remain available only through the old branches; nothing on `main` references them.

@@ -2,7 +2,7 @@
 
 `ContainerApp` (`platform.a5n.io/v1alpha1`, namespaced) creates, in the namespace's Subscription:
 
-**Read this first.** One resource is one container app in its own Container Apps environment (named `<app>-env`), running one public container image. Logs are not collected: the environment has no Log Analytics destination, so only the live log stream shows output, and troubleshooting a crashing app is expensive until the platform adds a log sink. Private apps have no private DNS zone group (see below), so until the platform provides DNS, clients inside the network can't resolve the app by name; that is a known limit, not a fault of your resource. The private endpoint must be in the same region as its subnet, so `location` must match the platform subnet's region. The image must come from a public registry: there are no registry credentials and no secrets in this API.
+**Read this first.** One resource is one container app in its own Container Apps environment (named `<app>-env`), running one public container image. Logs are not collected: the environment has no Log Analytics destination, so `ContainerAppConsoleLogs`, `ContainerAppSystemLogs` and metrics are not stored, only the live log stream shows output, and troubleshooting a crashing app is expensive until the platform adds a log sink. Expect Defender for Cloud to raise a "diagnostic logs are not enabled" finding on every deployed environment until the platform supplies a sink (a tenant DeployIfNotExists policy or a recorded exception, see `docs/tenant-controls.md`); the finding is not a fault of your resource. Private apps have no private DNS zone group (see below), so until the platform provides DNS, clients inside the network can't resolve the app by name; that is a known limit, not a fault of your resource. The private endpoint must be in the same region as its subnet, so `location` must match the platform subnet's region. The image must come from a public registry: there are no registry credentials and no secrets in this API.
 
 - a workload-profiles Container Apps environment with a Consumption profile, `publicNetworkAccess` Disabled unless `networking` is `public`;
 - one container app (single revision, HTTPS only, one container, HTTP scale rule);
@@ -23,9 +23,11 @@ The shared resolver (`projects/foundation/apis/_shared/resolver.md`) uses `spec.
 | `networking` | `infrastructureSubnetId` | Result |
 | --- | --- | --- |
 | `private` (default) | not set | environment with public access Disabled and a private endpoint in the platform subnet; ingress `internal` only |
-| `private` | set | environment injected into your dedicated subnet; ingress `internal` gets an internal load balancer; no private endpoint |
+| `private` | set | environment injected into your dedicated subnet (never the platform's private endpoint subnet: the resolver rejects it with `InfrastructureSubnetNotAllowed`); ingress `internal` gets an internal load balancer; no private endpoint |
 | `public` | not set | environment with public access Enabled; `ingress: external` is allowed |
 | `public` | set | injected environment with public access; `external` ingress is public |
+
+`ingress: external` requires `networking: public` and `deletionPolicy: Delete` (CEL): an Orphaned, Internet-facing, unpatched app must not outlive its resource. Zone redundancy is opt-in and needs `infrastructureSubnetId`.
 
 Private endpoint and VNet injection can be combined in Azure, but this API keeps them exclusive. A private endpoint works only on a workload-profiles environment with public access Disabled, which is why a Consumption workload profile is always set (without it the environment is consumption-only: it needs a /23, has no delegation and no private endpoint).
 
@@ -55,7 +57,7 @@ The composition creates no private DNS zone group, because the EnvironmentConfig
 
 `spec.deletionPolicy` is `Orphan` (default) or `Delete`, as for the Subscription (`managementPolicies` without `Delete`; `.m` MRs have no `deletionPolicy`). It applies to the environment and the app. The private endpoint carries no override and is removed with the resource either way.
 
-- `Orphan`: deleting the resource leaves the app and its environment in Azure, still running and still billed. Nobody manages them afterwards.
+- `Orphan` (not allowed with `ingress: external`): deleting the resource leaves the app and its environment in Azure, still running and still billed. Nobody manages them afterwards.
 - `Delete`: the app and the environment are deleted, including the app's revisions.
 - Adoption by name: the derived names depend only on the namespace, the resource name and the Subscription. Re-creating a resource with the same name derives the same names and adopts an orphaned app and environment with their settings. Set `parameters.name` to pick another, or delete the leftovers first.
 
@@ -74,8 +76,10 @@ Public registries only. No private registry, no credentials, no secrets, no envi
 | Revision mode | single |
 | Size | `small` 0.25 CPU / 0.5Gi, `medium` 0.5 / 1Gi, `large` 1 / 2Gi |
 | Replicas | `minReplicas` 0-10, `maxReplicas` 1-10, min <= max (CEL) |
+| TLS and client certificates | Azure defaults: HTTPS only with the platform's TLS; client certificate mode is not set (ignore); no mTLS and no custom TLS or domains |
+| Authentication | none: no Easy Auth, the app must authenticate its own callers |
 | Workload profile | Consumption only |
-| Logging | none: no Log Analytics destination |
+| Logging | none: no Log Analytics destination (console, system logs and metrics are not stored) |
 
 ## Naming
 
@@ -87,7 +91,7 @@ Public registries only. No private registry, no credentials, no secrets, no envi
 
 ## Schema deviations
 
-- The private endpoint group ID is `managedEnvironment` (singular). The plan text said `managedEnvironments`.
+- The private endpoint group ID is `managedEnvironment` (singular). The plan text said `managedEnvironments`; it is wrong.
 - `infrastructureSubnetId` needs a /27 or larger subnet delegated to `Microsoft.App/environments` (the XRD said /23, which applies to consumption-only environments); a Consumption workload profile is always set.
 - `status.environment` carries no `tenantId` (the XRD's draft had one) and gains `subnetId`; `status.appName` and `status.environmentName` are write-once.
 - No log fields (`logsDestination`, `logAnalyticsWorkspaceId`): both are optional in Azure, and omitting them means no logs are stored.
@@ -97,12 +101,12 @@ Public registries only. No private registry, no credentials, no secrets, no envi
 ## Threat model
 
 - The resolver is the trust boundary: it verifies the Subscription's UID and subscriptionId, and pins them (CEL write-once). A tenant cannot choose the region default, resource group default or the private endpoint subnet; they come from the EnvironmentConfig (the location only from the allowed list).
-- Exposure: private by default; public requires an explicit `networking: public`, and an Internet-facing ingress additionally `ingress: external`. CEL rejects `external` with private. There is no IP allowlist in this API; an external app is open to the Internet.
+- Exposure: private by default; public requires an explicit `networking: public`, and an Internet-facing ingress additionally `ingress: external`. CEL rejects `external` with private. There is no IP allowlist in this API; an external app is open to the Internet, and Easy Auth, client certificates and mTLS are not offered.
 - Supply chain: the image is the tenant's input. Public registries only, no `latest`, digest preferred; approved-registry enforcement is a platform policy, not this API.
 - No secrets: no registry credentials, no environment variables and no secret store in the XR. A system identity has no role until the platform assigns one (E1).
-- Cross-subscription network: the private endpoint joins the platform subnet, and an injected environment joins your dedicated subnet; both live outside the tenant Subscription (E13). The per-subscription identity needs the subnet-join rights on that subnet; without them the create fails closed with 403.
+- Cross-subscription network: the private endpoint joins the platform subnet, and an injected environment joins your dedicated subnet; both live outside the tenant Subscription (E13). The per-subscription identity needs the subnet-join rights on that subnet; without them the create fails closed with 403. Every identity already holds the join role on the platform subnet, so the resolver refuses an `infrastructureSubnetId` equal to it (`InfrastructureSubnetNotAllowed`, Fatal). No pre-grant exists for tenant-supplied subnets: any grant is a deliberate per-subnet identity-admin action, reviewed by Drizzt.
 - Data loss: there is no ManagementLock, so deleting the XR with `deletionPolicy: Delete` deletes the app and its environment; `Orphan` leaves them running and unmanaged.
-- Observability gap: no logs are stored, so abuse of an app (for example crypto mining) is visible only through Defender for Containers and cost anomalies.
+- Observability gap: no logs are stored (LT-3, LT-4), so abuse of an app (for example crypto mining) is not visible in logs. Other signals: Defender for Cloud (verify its Container Apps coverage after the first deploy, otherwise it is a documented gap), registry scanning and Defender CSPM, the Activity Log and cost anomalies.
 - Fail closed: unresolved subscription, environment or location, and a private app without a subnet, are Fatal and stop composition.
 
 ## Unverified until the first sandbox deploy

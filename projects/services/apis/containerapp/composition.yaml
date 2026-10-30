@@ -172,8 +172,14 @@ spec:
                 apiVersion: platform.a5n.io/v1alpha1
                 kind: Subscription
                 namespace: {{ $ns | quote }}
+            {{- if eq $kind "LandingZone" }}
+              vnets:
+                apiVersion: platform.a5n.io/v1alpha1
+                kind: VirtualNetwork
+                namespace: {{ $ns | quote }}
+            {{- end }}
             {{- /* The first call of a reconcile has no result yet: only the requirement above is returned. */}}
-            {{- if hasKey $er "subs" }}
+            {{- if and (hasKey $er "subs") (or (ne $kind "LandingZone") (hasKey $er "vnets")) }}
             {{- $subs := list -}}
             {{- range $i := (get (get $er "subs") "items" | default list) }}{{ $subs = append $subs $i.resource }}{{ end -}}
             {{- $names := list -}}
@@ -187,6 +193,132 @@ spec:
               {{- if and $ok (not (hasKey $s.metadata "deletionTimestamp")) }}{{ $ready = append $ready $s }}{{ end -}}
             {{- end -}}
 
+            {{- if eq $kind "LandingZone" -}}
+            {{- /* LandingZone creates its own Subscription (a composed resource), so a Subscription that does not exist yet or is not Ready is a wait, not a failure: only conditions are returned and nothing is pinned. Everything else fails closed. The Subscription must be controlled by this landing zone (D12). The virtual network is read from the same namespace and must belong to the landing zone's subscription. */ -}}
+            {{- $want := get $spec "subscription" | default "" -}}
+            {{- $pinnedSub := get $st "subscription" | default "" -}}
+            {{- $subName := $pinnedSub | default ($want | default $xr.metadata.name) -}}
+            {{- if and $pinnedSub $want (ne $want $pinnedSub) }}{{ fail (printf "SubscriptionMismatch: spec.subscription is '%s' but this resource is pinned to Subscription '%s'. Create a new resource to move." $want $pinnedSub) }}{{ end -}}
+            {{- $sub := dict -}}
+            {{- range $s := $subs }}{{ if eq $s.metadata.name $subName }}{{ $sub = $s }}{{ end }}{{ end -}}
+            {{- $subWait := "" -}}
+            {{- if not $sub -}}
+              {{- if $pinnedSub }}{{ fail (printf "SubscriptionChanged: pinned Subscription '%s' was not found in namespace '%s'. Existing resources are kept." $pinnedSub $ns) }}{{ end -}}
+              {{- $subWait = printf "Waiting for Subscription '%s' to be created." $subName -}}
+            {{- else -}}
+              {{- $mine := false -}}
+              {{- range $o := (get $sub.metadata "ownerReferences" | default list) }}{{ if and (eq (get $o "uid") $xr.metadata.uid) (get $o "controller" | default false) }}{{ $mine = true }}{{ end }}{{ end -}}
+              {{- if not $mine }}{{ fail (printf "SubscriptionNotControlled: Subscription '%s' exists in namespace '%s' but is not controlled by this landing zone. Choose another name in spec.subscription. Nothing is created." $subName $ns) }}{{ end -}}
+              {{- $isReady := false -}}
+              {{- range $s := $ready }}{{ if eq $s.metadata.name $subName }}{{ $isReady = true }}{{ end }}{{ end -}}
+              {{- $subIDNow := get ($sub.status | default dict) "subscriptionId" | default "" -}}
+              {{- if $pinnedSub -}}
+                {{- if or (not (get $st "subscriptionUid")) (not (get $st "subscriptionId")) }}{{ fail (printf "SubscriptionChanged: the pin of Subscription '%s' is incomplete. Delete and recreate this resource." $pinnedSub) }}{{ end -}}
+                {{- if ne $sub.metadata.uid (get $st "subscriptionUid") }}{{ fail (printf "SubscriptionChanged: Subscription '%s' has a different uid than the pin (deleted and recreated?). Existing resources are kept." $pinnedSub) }}{{ end -}}
+                {{- if ne $subIDNow (get $st "subscriptionId") }}{{ fail (printf "SubscriptionChanged: Subscription '%s' reports a different subscriptionId than the pin. Existing resources are kept." $pinnedSub) }}{{ end -}}
+                {{- if not $isReady }}{{ fail (printf "SubscriptionNotReady: pinned Subscription '%s' is not Ready or is being deleted. Existing resources are kept." $pinnedSub) }}{{ end -}}
+              {{- else if or (not $isReady) (not $subIDNow) -}}
+                {{- $subWait = printf "Waiting for Subscription '%s' to be Ready." $subName -}}
+              {{- end -}}
+            {{- end -}}
+            {{- if $subWait }}
+            ---
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ClaimConditions
+            conditions:
+              - type: SubscriptionResolved
+                status: "False"
+                reason: SubscriptionPending
+                message: {{ $subWait | quote }}
+                target: Composite
+            {{- else -}}
+            {{- $subID := get $sub.status "subscriptionId" -}}
+            {{- $pinEnv := get $st "environment" | default dict -}}
+            {{- $envLoc := get $env "location" | default "" -}}
+            {{- $loc := get $pinEnv "location" | default (get $params "location" | default $envLoc) -}}
+            {{- $rg := get $pinEnv "resourceGroupName" | default (get $params "resourceGroupName" | default (printf "rg-%s" $xr.metadata.name)) -}}
+            {{- if not (regexMatch `^[a-z][a-z0-9]*$` $loc) }}{{ fail (printf "EnvironmentInvalid: the location %q is not a valid region. Set it in the platform-environment EnvironmentConfig or spec.parameters.location." $loc) }}{{ end -}}
+            {{- if not (regexMatch `^[A-Za-z0-9._()-]*[A-Za-z0-9_()-]$` $rg) }}{{ fail (printf "EnvironmentInvalid: the resource group %q is not valid." $rg) }}{{ end -}}
+            {{- $drift := list -}}
+            {{- if get $pinEnv "location" -}}
+              {{- if and (not (get $params "location")) (ne $envLoc (get $pinEnv "location")) }}{{ $drift = append $drift (printf "location is '%s' in the EnvironmentConfig, '%s' in use" $envLoc $loc) }}{{ end -}}
+            {{- else -}}
+              {{- $allowed := get $env "allowedLocations" | default "" -}}
+              {{- if $allowed -}}
+                {{- $list := list -}}
+                {{- range $a := splitList "," $allowed }}{{ $list = append $list (trim $a | lower) }}{{ end -}}
+                {{- if not (has $loc $list) }}{{ fail (printf "LocationNotAllowed: location '%s' is not in the allowed locations (%s)." $loc (join ", " $list)) }}{{ end -}}
+              {{- end -}}
+            {{- end -}}
+            {{- $pinNet := get $st "network" | default dict -}}
+            {{- $vnName := get $pinNet "virtualNetwork" | default (get $spec "virtualNetwork" | default "") -}}
+            {{- if and (not $vnName) (hasKey $params "network") }}{{ $vnName = $xr.metadata.name }}{{ end -}}
+            {{- $subnetOut := get $pinNet "subnetId" | default "" -}}
+            {{- $netOK := true -}}
+            {{- $netReason := "VirtualNetworkResolved" -}}
+            {{- $netMsg := printf "Using virtual network '%s'." $vnName -}}
+            {{- if and $vnName (not $subnetOut) -}}
+              {{- $vn := dict -}}
+              {{- range $i := (get (get $er "vnets") "items" | default list) }}{{ if eq $i.resource.metadata.name $vnName }}{{ $vn = $i.resource }}{{ end }}{{ end -}}
+              {{- $vst := get $vn "status" | default dict -}}
+              {{- if not $vn -}}
+                {{- $netOK = false -}}{{- $netReason = "VirtualNetworkNotFound" -}}{{- $netMsg = printf "Waiting for VirtualNetwork '%s' in namespace '%s'." $vnName $ns -}}
+              {{- else if or (not (get $vst "subscriptionId")) (not (get $vst "subnetId")) -}}
+                {{- $netOK = false -}}{{- $netReason = "VirtualNetworkNotReady" -}}{{- $netMsg = printf "Waiting for VirtualNetwork '%s' to be resolved and to have a subnet." $vnName -}}
+              {{- else if ne (lower (get $vst "subscriptionId")) (lower $subID) -}}
+                {{- fail (printf "VirtualNetworkNotInSubscription: VirtualNetwork '%s' belongs to another subscription than this landing zone's. Use a virtual network created with spec.subscription '%s'." $vnName $subName) -}}
+              {{- else if not (regexMatch (printf `(?i)^/subscriptions/%s/resourcegroups/[^/]+/providers/microsoft\.network/virtualnetworks/[^/]+/subnets/[^/]+$` $subID) (get $vst "subnetId")) -}}
+                {{- fail (printf "VirtualNetworkNotInSubscription: the subnet of VirtualNetwork '%s' is not in this landing zone's subscription." $vnName) -}}
+              {{- else -}}
+                {{- $subnetOut = get $vst "subnetId" -}}
+              {{- end -}}
+            {{- end }}
+            ---
+            apiVersion: {{ $xr.apiVersion }}
+            kind: {{ $kind }}
+            status:
+              subscription: {{ $sub.metadata.name | quote }}
+              subscriptionUid: {{ $sub.metadata.uid | quote }}
+              subscriptionId: {{ $subID | quote }}
+            {{- if get ($sub.status | default dict) "providerConfigName" }}
+              providerConfigName: {{ get $sub.status "providerConfigName" | quote }}
+            {{- end }}
+              environment:
+                location: {{ $loc | quote }}
+                resourceGroupName: {{ $rg | quote }}
+            {{- if $subnetOut }}
+              network:
+                virtualNetwork: {{ $vnName | quote }}
+                subnetId: {{ $subnetOut | quote }}
+            {{- end }}
+            ---
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ClaimConditions
+            conditions:
+              - type: SubscriptionResolved
+                status: "True"
+                reason: SubscriptionResolved
+                message: {{ printf "Using Subscription '%s' (%s)." $sub.metadata.name "created by this landing zone" | quote }}
+                target: Composite
+              - type: EnvironmentValid
+                status: "True"
+                reason: EnvironmentValid
+                message: "The platform environment is valid."
+                target: Composite
+              - type: EnvironmentDrift
+                status: {{ ternary "True" "False" (gt (len $drift) 0) | quote }}
+                reason: {{ ternary "EnvironmentChanged" "InSync" (gt (len $drift) 0) }}
+                message: {{ ternary (printf "Pinned values are kept: %s." (join "; " $drift)) "The environment matches the pinned values." (gt (len $drift) 0) | quote }}
+                target: Composite
+            {{- if $vnName }}
+              - type: VirtualNetworkResolved
+                status: {{ ternary "True" "False" $netOK | quote }}
+                reason: {{ $netReason }}
+                message: {{ $netMsg | quote }}
+                target: Composite
+            {{- end }}
+            {{- end }}
+            {{- else -}}
             {{- /* 1. Subscription: pin first, then spec.subscription, then the only Ready Subscription. */ -}}
             {{- $pinned := get $st "subscription" | default "" -}}
             {{- $want := get $spec "subscription" | default "" -}}
@@ -272,11 +404,13 @@ spec:
               {{- if and (eq $kind "ContainerApp") (get $params "infrastructureSubnetId") -}}
                 {{- if or (and $liveSubnet (eq (lower (get $params "infrastructureSubnetId")) (lower $liveSubnet))) (and (get $pinEnv "subnetId") (eq (lower (get $params "infrastructureSubnetId")) (lower (get $pinEnv "subnetId")))) }}{{ fail "InfrastructureSubnetNotAllowed: infrastructureSubnetId is the platform's shared private endpoint subnet. Use a dedicated subnet delegated to Microsoft.App/environments. Nothing is created or pinned." }}{{ end -}}
               {{- end -}}
+              {{- $peSubnet := ternary (get $params "privateEndpointSubnetId" | default "") "" (ne $kind "ContainerApp") -}}
+              {{- if and $peSubnet $liveSubnet (eq (lower $peSubnet) (lower $liveSubnet)) }}{{ fail "PrivateEndpointSubnetNotAllowed: privateEndpointSubnetId is the platform's shared private endpoint subnet. Use a subnet of your own virtual network. Nothing is created or pinned." }}{{ end -}}
               {{- if $pinned -}}
                 {{- $subnet = get $pinEnv "subnetId" | default "" -}}
-                {{- if ne $subnet $liveSubnet }}{{ $drift = append $drift (ternary (printf "a subnetId was added to the EnvironmentConfig after this %s was created and is not used" $noun) "the subnetId in the EnvironmentConfig differs from the pinned subnet; the pinned subnet is kept" (eq $subnet "")) }}{{ end -}}
+                {{- if and (not $peSubnet) (ne $subnet $liveSubnet) }}{{ $drift = append $drift (ternary (printf "a subnetId was added to the EnvironmentConfig after this %s was created and is not used" $noun) "the subnetId in the EnvironmentConfig differs from the pinned subnet; the pinned subnet is kept" (eq $subnet "")) }}{{ end -}}
               {{- else -}}
-                {{- $subnet = $liveSubnet -}}
+                {{- $subnet = $peSubnet | default $liveSubnet -}}
               {{- end -}}
               {{- if and $private (not $subnet) -}}
                 {{- if not $pinned }}{{ fail "SubnetNotConfigured: networking is private but the platform-environment EnvironmentConfig has no valid subnetId (missing, a placeholder or malformed). Nothing is created or pinned until the platform sets it." }}{{ end -}}
@@ -347,6 +481,7 @@ spec:
                 reason: {{ ternary "EnvironmentChanged" "InSync" (gt (len $drift) 0) }}
                 message: {{ ternary (printf "Pinned values are kept: %s." (join "; " $drift)) "The environment matches the pinned values." (gt (len $drift) 0) | quote }}
                 target: Composite
+            {{- end }}
             {{- end }}
     # END resolver
 

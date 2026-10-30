@@ -99,6 +99,23 @@ check "reconcile 1, public: pinned without a subnetId when the platform has none
   abort st["environment"].inspect unless st["environment"] == { "location" => "westeurope", "resourceGroupName" => "rg-test-default" }
   abort cond["EnvironmentValid"].inspect unless cond["EnvironmentValid"]["status"] == "True"' "$WORK/env-nosubnet.yaml"
 
+LZ_SUBNET=/subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-lz/providers/Microsoft.Network/virtualNetworks/vnet-lz/subnets/snet-pe
+edit $T/xr.yaml "$WORK/xr-pesubnet.yaml" 'd["spec"]["parameters"]["privateEndpointSubnetId"] = "'$LZ_SUBNET'"'
+check "privateEndpointSubnetId: pinned as the endpoint subnet instead of the platform subnet, no drift" "$WORK/xr-pesubnet.yaml" "" '
+  abort st["environment"].inspect unless st["environment"]["subnetId"] == "'$LZ_SUBNET'"
+  abort cond["EnvironmentDrift"].inspect unless cond["EnvironmentDrift"]["status"] == "False"'
+envedit env-nosubnet-pe.yaml 'd["data"].delete("subnetId")'
+check "privateEndpointSubnetId needs no platform subnet" "$WORK/xr-pesubnet.yaml" "" '
+  abort st["environment"].inspect unless st["environment"]["subnetId"] == "'$LZ_SUBNET'"' "$WORK/env-nosubnet-pe.yaml"
+edit $T/xr.yaml "$WORK/xr-pe-platform.yaml" 'd["spec"]["parameters"]["privateEndpointSubnetId"] = "'$SUBNET'".upcase'
+must_fail "privateEndpointSubnetId equal to the platform subnet (any case): Fatal PrivateEndpointSubnetNotAllowed" PrivateEndpointSubnetNotAllowed "$WORK/xr-pe-platform.yaml"
+edit $T/xr-pinned.yaml "$WORK/xr-pe-pinned.yaml" 'd["spec"]["parameters"]["privateEndpointSubnetId"] = "'$LZ_SUBNET'"; d["status"]["environment"]["subnetId"] = "'$LZ_SUBNET'"'
+check "pinned with privateEndpointSubnetId: the endpoint is in that subnet and the platform subnet is no drift" "$WORK/xr-pe-pinned.yaml" observed-account.yaml '
+  abort kinds.inspect unless kinds.include?("PrivateEndpoint")
+  abort cond["EnvironmentDrift"].inspect if cond["EnvironmentDrift"]["message"].include?("subnetId")
+  pe = docs.find { |d| d["kind"] == "PrivateEndpoint" }
+  abort pe.inspect unless pe["spec"]["forProvider"]["subnetId"] == "'$LZ_SUBNET'"'
+
 # --- reconcile 2: pins fed back in ---------------------------------------------------------
 check "reconcile 2: only the account (containers and endpoint wait for its ID); hardened; pins win" $T/xr-pinned.yaml "" '
   abort kinds.inspect unless kinds == %w[Account]

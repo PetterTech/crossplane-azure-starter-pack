@@ -104,6 +104,15 @@ check "reconcile 1, public: pinned without a subnetId when the platform has none
   abort st["environment"].inspect unless st["environment"] == { "location" => "westeurope", "resourceGroupName" => "rg-test-default", "tenantId" => "'$TENANT'" }
   abort cond["EnvironmentValid"].inspect unless cond["EnvironmentValid"]["status"] == "True"' "$WORK/env-nosubnet.yaml"
 
+LZ_SUBNET=/subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-lz/providers/Microsoft.Network/virtualNetworks/vnet-lz/subnets/snet-pe
+edit $T/xr.yaml "$WORK/xr-pesubnet.yaml" 'd["spec"]["parameters"]["privateEndpointSubnetId"] = "'$LZ_SUBNET'"'
+envedit env-nosubnet-pe.yaml 'd["data"].delete("subnetId")'
+check "privateEndpointSubnetId: pinned as the endpoint subnet, needs no platform subnet" "$WORK/xr-pesubnet.yaml" "" '
+  abort st["environment"].inspect unless st["environment"]["subnetId"] == "'$LZ_SUBNET'" && st["environment"]["tenantId"] == "'$TENANT'"
+  abort cond["EnvironmentDrift"].inspect unless cond["EnvironmentDrift"]["status"] == "False"' "$WORK/env-nosubnet-pe.yaml"
+edit $T/xr.yaml "$WORK/xr-pe-platform.yaml" 'd["spec"]["parameters"]["privateEndpointSubnetId"] = "'$SUBNET'".upcase'
+must_fail "privateEndpointSubnetId equal to the platform subnet (any case): Fatal PrivateEndpointSubnetNotAllowed" PrivateEndpointSubnetNotAllowed "$WORK/xr-pe-platform.yaml"
+
 # --- reconcile 2: pins fed back in ---------------------------------------------------------
 check "reconcile 2: only the vault (the endpoint waits for its ID); hardened; pins win" $T/xr-pinned.yaml "" '
   abort kinds.inspect unless kinds == %w[Vault]

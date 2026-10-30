@@ -139,8 +139,8 @@ spec:
                         Azure resource ID of the subnet for the private endpoint for blob. Optional; defaults
                         to the platform subnet from the platform EnvironmentConfig. Landing zones set it to
                         place the private endpoint in their own virtual network. The platform's shared
-                        private endpoint subnet must not be set here; the platform is to reject it once the
-                        subnet resolver enforces this (the API schema can't check it). Only with networking
+                        private endpoint subnet must not be set here; the platform rejects it
+                        (PrivateEndpointSubnetNotAllowed; the API schema can't check it). Only with networking
                         private. Can't be added, changed or removed after creation.
                       maxLength: 400
                       pattern: "^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.Network/virtualNetworks/[^/]+/subnets/[^/]+$"

@@ -44,3 +44,14 @@ After the first sandbox subscription is vended, check that the Defender plans ar
 - **Accepted gaps.** Customer-managed keys and HSM are not offered (E14) and the SKU is fixed at standard; Premium and Managed HSM are out of scope.
 - **Subnet join (E13).** The same subnet-join custom role applies to the vault private endpoint, with the same blast radius, quota (`count/keyvaults.platform.a5n.io`, e.g. `hard: {count/keyvaults.platform.a5n.io: "5"}`, illustrative) and subnet policy notes as for storage.
 - **Purge protection.** Not toggleable: it cannot be turned off in this API. Deleting a vault leaves it soft-deleted and its name reserved for up to 90 days; platform admins cannot purge it earlier.
+
+## Container Apps baseline
+
+`ContainerApp` (`docs/apis/containerapp.md`) creates a Container Apps environment and one app. These controls are prerequisites, not shipped policy. Keldorn adds the conditions.
+
+- **Defender for Containers.** Enable the plan "Microsoft Defender for Containers" on the subscription, inherited via the management group by DeployIfNotExists. It is the only runtime threat signal while no logs are collected. After the first sandbox deploy, treat the Defender recommendations as ground truth.
+- **Diagnostic settings.** Not part of the XR; the environment has no Log Analytics destination, so no console or system logs are stored and troubleshooting is expensive. Assign a diagnostic settings policy (DeployIfNotExists) for Container Apps environments to Log Analytics, or accept the gap. Keep audit logs for at least 1 year.
+- **Backstop policies.** Assign (audit or deny): Container Apps should only be accessible over HTTPS, Container Apps environments should use network injection or private link, Container Apps environments should use virtual network injection, managed identity should be enabled, and an allowed-registries policy so only approved public registries are pullable (the XR accepts any public registry; the image is the tenant's input).
+- **Private DNS.** Create the zone `privatelink.<region>.azurecontainerapps.io` per region and assign a DeployIfNotExists policy that registers the private endpoint's DNS zone group. Until then private apps are unreachable by name (D6).
+- **Subnet join (E13).** The subnet-join custom role applies to the platform subnet of the private endpoint, and to the dedicated subnet of an injected environment (at least /27, empty, delegated to `Microsoft.App/environments`, supplied by the tenant), with the same blast radius, quota (`count/containerapps.platform.a5n.io`, illustrative) and subnet policy notes as for storage. Whoever grants the join on a tenant-supplied subnet decides which subnets a tenant may use.
+- **Accepted gaps.** No private registry or credentials, no secrets, no custom domains or certificates, no dedicated workload profiles; the app has no role until the platform assigns one (E1).

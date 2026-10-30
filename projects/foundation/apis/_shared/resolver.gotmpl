@@ -108,14 +108,14 @@ requirements:
 {{- $envReason := "EnvironmentValid" -}}
 {{- $subnet := "" -}}
 {{- $tenant := "" -}}
-{{- if or (eq $kind "StorageAccount") (eq $kind "KeyVault") -}}
-  {{- /* The private endpoint subnet (and, for KeyVault, the tenant). With networking private, an unpinned resource and a missing, placeholder or malformed subnetId is Fatal (nothing is composed or pinned, Ready is not reported). A pinned one keeps its pin and reports EnvironmentValid=False. */ -}}
-  {{- $noun := ternary "storage account" "key vault" (eq $kind "StorageAccount") -}}
+{{- if or (eq $kind "StorageAccount") (eq $kind "KeyVault") (eq $kind "ContainerApp") -}}
+  {{- /* The private endpoint subnet (and, for KeyVault, the tenant). With networking private, an unpinned resource and a missing, placeholder or malformed subnetId is Fatal (nothing is composed or pinned, Ready is not reported). A pinned one keeps its pin and reports EnvironmentValid=False. A ContainerApp with its own infrastructureSubnetId needs no platform subnet. */ -}}
+  {{- $noun := get (dict "StorageAccount" "storage account" "KeyVault" "key vault" "ContainerApp" "container app") $kind -}}
   {{- if eq $kind "KeyVault" -}}
     {{- $tenant = get $pinEnv "tenantId" | default (get $env "tenantId" | default "") -}}
     {{- if and $pinned (ne $tenant (get $env "tenantId" | default "")) }}{{ $drift = append $drift "tenantId in the EnvironmentConfig differs from the pinned tenant; the pinned tenant is kept" }}{{ end -}}
   {{- end -}}
-  {{- $private := eq (get $params "networking" | default "private") "private" -}}
+  {{- $private := and (eq (get $params "networking" | default "private") "private") (not (and (eq $kind "ContainerApp") (get $params "infrastructureSubnetId"))) -}}
   {{- $liveSubnet := get $env "subnetId" | default "" -}}
   {{- if not (regexMatch `(?i)^/subscriptions/[^/]+/resourcegroups/[^/]+/providers/microsoft\.network/virtualnetworks/[^/]+/subnets/[^/]+$` $liveSubnet) }}{{ $liveSubnet = "" }}{{ end -}}
   {{- if $pinned -}}
@@ -162,7 +162,7 @@ status:
   environment:
     location: {{ $loc | quote }}
     resourceGroupName: {{ $rg | quote }}
-{{- if and (or (eq $kind "StorageAccount") (eq $kind "KeyVault")) $subnet }}
+{{- if and (or (eq $kind "StorageAccount") (eq $kind "KeyVault") (eq $kind "ContainerApp")) $subnet }}
     subnetId: {{ $subnet | quote }}
 {{- end }}
 {{- if eq $kind "KeyVault" }}

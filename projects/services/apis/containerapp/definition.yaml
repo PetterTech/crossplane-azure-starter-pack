@@ -75,6 +75,8 @@ spec:
                   message: "spec.parameters.networking can't be changed once set. Create a new ContainerApp instead."
                 - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.zoneRedundant) || (has(self.parameters) && has(self.parameters.zoneRedundant) && self.parameters.zoneRedundant == oldSelf.parameters.zoneRedundant)"
                   message: "spec.parameters.zoneRedundant can't be changed once set; Azure fixes it at creation. Create a new ContainerApp instead."
+                - rule: "!(has(self.parameters) && has(self.parameters.ingress) && self.parameters.ingress == 'external') || (has(self.deletionPolicy) && self.deletionPolicy == 'Delete')"
+                  message: "ingress external requires deletionPolicy Delete. An Orphaned, Internet-facing app would stay exposed and unpatched after its resource is deleted."
               properties:
                 subscription:
                   type: string
@@ -93,7 +95,7 @@ spec:
                     What happens in Azure when this resource is deleted. Orphan (default): the container app
                     and its environment stay in Azure, and only the Kubernetes objects and the private endpoint
                     are removed. Delete: the app, the environment and the private endpoint are deleted in
-                    Azure. A new resource with the same name in the same namespace and Subscription derives
+                    Azure. Required when parameters.ingress is external. A new resource with the same name in the same namespace and Subscription derives
                     the same names and adopts orphaned resources unless parameters.name is set.
                   enum: [Delete, Orphan]
                   default: Orphan
@@ -189,7 +191,7 @@ spec:
                         Azure resource ID of a dedicated subnet for the environment (virtual network
                         injection). Optional. The subnet must be empty, delegated to
                         Microsoft.App/environments and at least /27 (the environment uses workload profiles). The platform's shared private endpoint
-                        subnet can't be used. The platform grants no rights on it; the identity-admin
+                        subnet can't be used (the resolver rejects it). The platform grants no rights on it; the identity-admin
                         gate must allow the subnet join first. Can't be added, changed or removed after
                         creation.
                       maxLength: 400

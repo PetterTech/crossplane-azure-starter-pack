@@ -107,6 +107,16 @@ spec:
   parameters: $1
 EOF
 }
+dry_delete() { k -n t apply --dry-run=server -f - <<EOF
+apiVersion: platform.a5n.io/v1alpha1
+kind: ContainerApp
+metadata:
+  name: dry
+spec:
+  deletionPolicy: Delete
+  parameters: $1
+EOF
+}
 expect_reject "external ingress with private networking" "ingress external requires networking public" dry "{\"image\":\"$IMG\",\"ingress\":\"external\"}"
 expect_reject "zoneRedundant without infrastructureSubnetId" "zoneRedundant requires infrastructureSubnetId" dry "{\"image\":\"$IMG\",\"zoneRedundant\":true}"
 expect_reject "minReplicas greater than maxReplicas" "can't be greater than maxReplicas" dry "{\"image\":\"$IMG\",\"minReplicas\":4,\"maxReplicas\":2}"
@@ -115,7 +125,8 @@ expect_reject "image without a tag" "must have a tag or a digest" dry '{"image":
 expect_reject "a 33 character name" "" dry "{\"image\":\"$IMG\",\"name\":\"abcdefghijklmnopqrstuvwxyzabcdefg\"}"
 expect_reject "an uppercase name" "" dry "{\"image\":\"$IMG\",\"name\":\"MyApp\"}"
 expect_reject "two hyphens in a row" "" dry "{\"image\":\"$IMG\",\"name\":\"my--app\"}"
-expect_ok "public with external ingress" dry "{\"image\":\"$IMG\",\"networking\":\"public\",\"ingress\":\"external\"}"
+expect_reject "external ingress with deletionPolicy Orphan" "ingress external requires deletionPolicy Delete" dry "{\"image\":\"$IMG\",\"networking\":\"public\",\"ingress\":\"external\"}"
+expect_ok "public with external ingress and deletionPolicy Delete" dry_delete "{\"image\":\"$IMG\",\"networking\":\"public\",\"ingress\":\"external\"}"
 expect_ok "zoneRedundant with infrastructureSubnetId" dry "{\"image\":\"$IMG\",\"zoneRedundant\":true,\"infrastructureSubnetId\":\"$APPS\"}"
 expect_ok "a digest-pinned image" dry '{"image":"ghcr.io/example/hello-api@sha256:3f1c9a7e5b2d48c6a0e9d1f47b8c2a6e5d0f9b3c71a4e8d2c6b0f5a9e3d71c48"}'
 expect_ok "deletionPolicy defaults to Orphan" bash -c "[ \"\$(kubectl --context $CTX -n t get containerapp with-subnet -o jsonpath='{.spec.deletionPolicy}')\" = Orphan ]"

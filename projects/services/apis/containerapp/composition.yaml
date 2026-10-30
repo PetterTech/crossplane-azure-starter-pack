@@ -269,6 +269,9 @@ spec:
               {{- $private := and (eq (get $params "networking" | default "private") "private") (not (and (eq $kind "ContainerApp") (get $params "infrastructureSubnetId"))) -}}
               {{- $liveSubnet := get $env "subnetId" | default "" -}}
               {{- if not (regexMatch `(?i)^/subscriptions/[^/]+/resourcegroups/[^/]+/providers/microsoft\.network/virtualnetworks/[^/]+/subnets/[^/]+$` $liveSubnet) }}{{ $liveSubnet = "" }}{{ end -}}
+              {{- if and (eq $kind "ContainerApp") (get $params "infrastructureSubnetId") -}}
+                {{- if or (and $liveSubnet (eq (lower (get $params "infrastructureSubnetId")) (lower $liveSubnet))) (and (get $pinEnv "subnetId") (eq (lower (get $params "infrastructureSubnetId")) (lower (get $pinEnv "subnetId")))) }}{{ fail "InfrastructureSubnetNotAllowed: infrastructureSubnetId is the platform's shared private endpoint subnet. Use a dedicated subnet delegated to Microsoft.App/environments. Nothing is created or pinned." }}{{ end -}}
+              {{- end -}}
               {{- if $pinned -}}
                 {{- $subnet = get $pinEnv "subnetId" | default "" -}}
                 {{- if ne $subnet $liveSubnet }}{{ $drift = append $drift (ternary (printf "a subnetId was added to the EnvironmentConfig after this %s was created and is not used" $noun) "the subnetId in the EnvironmentConfig differs from the pinned subnet; the pinned subnet is kept" (eq $subnet "")) }}{{ end -}}

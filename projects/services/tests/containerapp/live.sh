@@ -125,6 +125,15 @@ out=$(k -n team-a patch containerapp api --subresource=status --type merge -p '{
 if grep -q write-once <<<"$out"; then ok "status.environmentName is write-once on a live Crossplane XRD"; else echo "$out"; die "environmentName write-once"; fi
 out=$(k -n team-a patch containerapp api --type merge -p '{"spec":{"parameters":{"name":"late-name"}}}' 2>&1 || true)
 if grep -q "can't be added, changed or removed" <<<"$out"; then ok "adding spec.parameters.name to an existing app is rejected"; else echo "$out"; die "name add"; fi
+out=$(k -n team-a apply -f - 2>&1 <<EOF || true
+apiVersion: platform.a5n.io/v1alpha1
+kind: ContainerApp
+metadata: {name: exposed}
+spec:
+  parameters: {image: $IMG, networking: public, ingress: external}
+EOF
+)
+if grep -q "ingress external requires deletionPolicy Delete" <<<"$out"; then ok "external ingress with deletionPolicy Orphan is rejected"; else echo "$out"; die "external orphan"; fi
 
 # the environment becomes ready: the app and the private endpoint follow
 env_ready api
@@ -165,6 +174,7 @@ apiVersion: platform.a5n.io/v1alpha1
 kind: ContainerApp
 metadata: {name: web}
 spec:
+  deletionPolicy: Delete
   parameters:
     image: $IMG
     networking: public
@@ -195,6 +205,19 @@ env_ready worker
 wait_for "injected: app composed" 90 bash -c "[ \$(kubectl --context $CTX -n team-a get $APPS -l crossplane.io/composite=worker -o name | wc -l) -eq 1 ]"
 sleep 10
 [ "$(count $PES worker)" -eq 0 ] && ok "injected: no private endpoint" || die "unexpected endpoint (injected)"
+
+# --- injected into the platform's own subnet: Fatal -----------------------------------------
+k -n team-a apply -f - >/dev/null <<EOF
+apiVersion: platform.a5n.io/v1alpha1
+kind: ContainerApp
+metadata: {name: sharedsubnet}
+spec:
+  parameters:
+    image: $IMG
+    infrastructureSubnetId: $SUBNET_PE
+EOF
+wait_for "infrastructureSubnetId equal to the platform subnet: Fatal InfrastructureSubnetNotAllowed" 60 bash -c "kubectl --context $CTX -n team-a get containerapps.platform.a5n.io sharedsubnet -o jsonpath='{.status.conditions[?(@.type==\"Synced\")].message}' | grep -q InfrastructureSubnetNotAllowed"
+[ "$(count $ENVS sharedsubnet)" -eq 0 ] && ok "shared subnet: no environment created" || die "shared subnet composed"
 
 # --- private without a platform subnet: Fatal, nothing created, not Ready --------------------
 k apply -f - >/dev/null <<'EOF'

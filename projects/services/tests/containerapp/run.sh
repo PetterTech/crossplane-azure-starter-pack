@@ -135,7 +135,7 @@ ruby -ryaml -e '
   envs = ARGV[1..].map { |f| load_name.(f, "Environment") }
   abort envs.inspect unless envs[0] == envs[1] && envs[0] != envs[2] && envs[0] != envs[3] && envs[2] != envs[3]
   abort envs.inspect unless envs.all? { |x| x =~ /\Aca[a-z0-9]{22}-env\z/ }
-  app = load_name.(ARGV[0], "ContainerApp")
+  app = envs[0].delete_suffix("-env")
   abort app.inspect unless app =~ /\A[a-z][a-z0-9]{23}\z/' "$WORK/name1.yaml" "$WORK/name5.yaml" "$WORK/name2.yaml" "$WORK/name3.yaml" "$WORK/name4.yaml" \
   && echo "PASS derived names: deterministic, app 24 chars lowercase alphanumeric, environment <app>-env, differ per Subscription and per XR name"
 
@@ -190,7 +190,7 @@ check "reconcile 4: app and endpoint projected, XR Ready, one ProviderConfig, no
   abort "Ready=#{cond["Ready"].inspect}" unless cond["Ready"]["status"] == "True"'
 
 # variants: public with external ingress, injected with an internal load balancer, system identity, sizes
-edit $T/xr-pinned.yaml "$WORK/xr-public.yaml" "$P[\"networking\"] = \"public\"; $P[\"ingress\"] = \"external\"; $P[\"identity\"] = \"system\"; $P[\"size\"] = \"large\"; $P[\"minReplicas\"] = 0; d[\"status\"][\"environment\"].delete(\"subnetId\")"
+edit $T/xr-pinned.yaml "$WORK/xr-public.yaml" "$P[\"networking\"] = \"public\"; $P[\"ingress\"] = \"external\"; $P[\"identity\"] = \"system\"; $P[\"size\"] = \"large\"; $P[\"minReplicas\"] = 0; d[\"spec\"][\"deletionPolicy\"] = \"Delete\"; d[\"status\"][\"environment\"].delete(\"subnetId\")"
 check "public, external ingress, system identity, large: no endpoint, environment public, no subnet needed" "$WORK/xr-public.yaml" observed-env.yaml '
   abort kinds.inspect unless kinds == %w[ContainerApp Environment]
   f = res["environment"]["spec"]["forProvider"]
@@ -234,6 +234,10 @@ echo "PASS composed Environment, ContainerApp and PrivateEndpoint validate again
 # --- private without a usable subnet and without an own infrastructure subnet: fail closed ---
 envedit env-placeholder.yaml 'd["data"]["subnetId"] = "<SUBNET_ID>"'
 envedit env-badsubnet.yaml 'd["data"]["subnetId"] = "not-a-subnet"'
+for sub in "$SUBNET" "$(tr A-Z a-z <<<"$SUBNET")"; do
+  edit $T/xr.yaml "$WORK/xr-shared-subnet.yaml" "$P[\"infrastructureSubnetId\"] = \"$sub\""
+  must_fail "infrastructureSubnetId equal to the platform subnet ($sub): Fatal InfrastructureSubnetNotAllowed, nothing composed" InfrastructureSubnetNotAllowed "$WORK/xr-shared-subnet.yaml"
+done
 for e in env-nosubnet env-placeholder env-badsubnet; do
   must_fail "private, first reconcile, $e: Fatal SubnetNotConfigured, nothing pinned or composed, Ready not reported" SubnetNotConfigured $T/xr.yaml "" "$WORK/$e.yaml"
   edit $T/xr-pinned.yaml "$WORK/xr-held.yaml" 'd["status"].delete("environment")'
@@ -293,6 +297,7 @@ validate_accepts() { # name ruby-edit
   if crossplane resource validate "$XRD" "$WORK/xr-ok.yaml" >/dev/null 2>&1; then echo "PASS XRD accepts $1"; else echo "FAIL XRD rejects $1"; crossplane resource validate "$XRD" "$WORK/xr-ok.yaml" 2>&1 | head -5; exit 1; fi
 }
 validate_rejects "external ingress with networking private" "ingress external requires networking public" "$P[\"ingress\"] = \"external\""
+validate_rejects "external ingress with deletionPolicy Orphan" "ingress external requires deletionPolicy Delete" "$P[\"networking\"] = \"public\"; $P[\"ingress\"] = \"external\""
 validate_rejects "zoneRedundant without infrastructureSubnetId" "zoneRedundant requires infrastructureSubnetId" "$P[\"zoneRedundant\"] = true"
 validate_rejects "minReplicas greater than maxReplicas" "minReplicas can't be greater than maxReplicas" "$P[\"minReplicas\"] = 5; $P[\"maxReplicas\"] = 2"
 validate_rejects "the :latest tag" ":latest" "$P[\"image\"] = \"ghcr.io/example/hello-api:latest\""
@@ -315,7 +320,7 @@ validate_rejects "maxReplicas 11" "maximum\|less than or equal" "$P[\"maxReplica
 validate_accepts "a digest-pinned image" "$P[\"image\"] = \"ghcr.io/example/hello-api@sha256:3f1c9a7e5b2d48c6a0e9d1f47b8c2a6e5d0f9b3c71a4e8d2c6b0f5a9e3d71c48\""
 validate_accepts "a registry port with a tag" "$P[\"image\"] = \"registry.example.com:5000/hello-api:1.0\""
 validate_accepts "deletionPolicy Delete" 'd["spec"]["deletionPolicy"] = "Delete"'
-validate_accepts "public with external ingress" "$P[\"networking\"] = \"public\"; $P[\"ingress\"] = \"external\""
+validate_accepts "public with external ingress and deletionPolicy Delete" "$P[\"networking\"] = \"public\"; $P[\"ingress\"] = \"external\"; d[\"spec\"][\"deletionPolicy\"] = \"Delete\""
 validate_accepts "zoneRedundant with infrastructureSubnetId" "$P[\"zoneRedundant\"] = true; $P[\"infrastructureSubnetId\"] = \"$INJECTED\""
 validate_accepts "a 32 character name" "$P[\"name\"] = \"a\" * 32"
 validate_accepts "a name with single hyphens" "$P[\"name\"] = \"my-app-01\""

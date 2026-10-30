@@ -63,6 +63,8 @@ spec:
                   message: "spec.parameters.name can't be added, changed or removed after creation. Create a new KeyVault instead."
                 - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.softDeleteDays) || (has(self.parameters) && has(self.parameters.softDeleteDays) && self.parameters.softDeleteDays == oldSelf.parameters.softDeleteDays)"
                   message: "spec.parameters.softDeleteDays can't be changed once set; Azure fixes the retention period at creation. Create a new KeyVault instead."
+                - rule: "(has(self.parameters) && has(self.parameters.privateEndpointSubnetId)) == (has(oldSelf.parameters) && has(oldSelf.parameters.privateEndpointSubnetId)) && (!(has(oldSelf.parameters) && has(oldSelf.parameters.privateEndpointSubnetId)) || self.parameters.privateEndpointSubnetId == oldSelf.parameters.privateEndpointSubnetId)"
+                  message: "spec.parameters.privateEndpointSubnetId can't be added, changed or removed after creation. Create a new KeyVault instead."
               properties:
                 subscription:
                   type: string
@@ -92,6 +94,8 @@ spec:
                   description: Settings of the key vault.
                   default: {}
                   x-kubernetes-validations:
+                    - rule: "!has(self.privateEndpointSubnetId) || !has(self.networking) || self.networking == 'private'"
+                      message: "privateEndpointSubnetId requires networking private."
                     - rule: "!has(self.allowedIpRanges) || size(self.allowedIpRanges) == 0 || (has(self.networking) && self.networking == 'public')"
                       message: "allowedIpRanges requires networking public."
                   properties:
@@ -122,6 +126,17 @@ spec:
                       pattern: "^[a-zA-Z0-9._()-]*[a-zA-Z0-9_()-]$"
                       minLength: 1
                       maxLength: 90
+                    privateEndpointSubnetId:
+                      type: string
+                      description: >-
+                        Azure resource ID of the subnet for the private endpoint for the vault. Optional;
+                        defaults to the platform subnet from the platform EnvironmentConfig. Landing zones set
+                        it to place the private endpoint in their own virtual network. The platform's shared
+                        private endpoint subnet must not be set here; the platform is to reject it once the
+                        subnet resolver enforces this (the API schema can't check it). Only with networking
+                        private. Can't be added, changed or removed after creation.
+                      maxLength: 400
+                      pattern: "^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.Network/virtualNetworks/[^/]+/subnets/[^/]+$"
                     networking:
                       type: string
                       description: >-

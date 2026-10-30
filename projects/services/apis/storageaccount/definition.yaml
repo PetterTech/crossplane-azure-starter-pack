@@ -64,6 +64,8 @@ spec:
                   message: "spec.parameters.accountTier can't be changed once set. Create a new StorageAccount instead."
                 - rule: "!has(oldSelf.parameters) || !has(oldSelf.parameters.accountKind) || (has(self.parameters) && has(self.parameters.accountKind) && self.parameters.accountKind == oldSelf.parameters.accountKind)"
                   message: "spec.parameters.accountKind can't be changed once set. Create a new StorageAccount instead."
+                - rule: "(has(self.parameters) && has(self.parameters.privateEndpointSubnetId)) == (has(oldSelf.parameters) && has(oldSelf.parameters.privateEndpointSubnetId)) && (!(has(oldSelf.parameters) && has(oldSelf.parameters.privateEndpointSubnetId)) || self.parameters.privateEndpointSubnetId == oldSelf.parameters.privateEndpointSubnetId)"
+                  message: "spec.parameters.privateEndpointSubnetId can't be added, changed or removed after creation. Create a new StorageAccount instead."
               properties:
                 subscription:
                   type: string
@@ -92,6 +94,8 @@ spec:
                   description: Settings of the storage account.
                   default: {}
                   x-kubernetes-validations:
+                    - rule: "!has(self.privateEndpointSubnetId) || !has(self.networking) || self.networking == 'private'"
+                      message: "privateEndpointSubnetId requires networking private."
                     - rule: "!has(self.accountTier) || self.accountTier != 'Premium' || (has(self.accountKind) && self.accountKind != 'StorageV2')"
                       message: "accountTier Premium requires accountKind BlockBlobStorage or FileStorage."
                     - rule: "!has(self.accountKind) || self.accountKind == 'StorageV2' || (has(self.accountTier) && self.accountTier == 'Premium')"
@@ -129,6 +133,17 @@ spec:
                       pattern: "^[a-zA-Z0-9._()-]*[a-zA-Z0-9_()-]$"
                       minLength: 1
                       maxLength: 90
+                    privateEndpointSubnetId:
+                      type: string
+                      description: >-
+                        Azure resource ID of the subnet for the private endpoint for blob. Optional; defaults
+                        to the platform subnet from the platform EnvironmentConfig. Landing zones set it to
+                        place the private endpoint in their own virtual network. The platform's shared
+                        private endpoint subnet must not be set here; the platform is to reject it once the
+                        subnet resolver enforces this (the API schema can't check it). Only with networking
+                        private. Can't be added, changed or removed after creation.
+                      maxLength: 400
+                      pattern: "^/subscriptions/[^/]+/resourceGroups/[^/]+/providers/Microsoft\\.Network/virtualNetworks/[^/]+/subnets/[^/]+$"
                     networking:
                       type: string
                       description: >-

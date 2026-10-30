@@ -41,8 +41,10 @@ spec:
             A landing zone with no fields creates only the subscription. Storage accounts and key
             vaults in a landing zone are always private: their private endpoints use the landing zone's
             own virtual network (the one it creates or the one named in spec.virtualNetwork). Billing
-            scope, management group, tenant, hub, IPAM pool, default region and default resource group
-            come from the platform EnvironmentConfig, never from this spec. Deleting a landing zone never
+            scope, management group, tenant, hub, IPAM pool and default region come from the platform
+            EnvironmentConfig, never from this spec. The landing zone also creates one resource group in
+            its new subscription, named rg-<name> unless parameters.resourceGroupName is set; it is
+            never deleted and never locked. Deleting a landing zone never
             cancels or deletes the subscription: it is left in Azure and must be cancelled by the platform
             team. Condition Ready=True means the subscription and every requested part exist.
           x-kubernetes-validations:
@@ -74,6 +76,8 @@ spec:
                   message: "Set either spec.virtualNetwork (use an existing virtual network) or spec.parameters.network (create one), not both."
                 - rule: "!has(self.parameters) || (!has(self.parameters.storageAccount) && !has(self.parameters.keyVault)) || has(self.virtualNetwork) || has(self.parameters.network)"
                   message: "storageAccount and keyVault are private and need a virtual network: set spec.parameters.network (create one) or spec.virtualNetwork (use an existing one)."
+                - rule: "!has(self.deletionPolicy) || self.deletionPolicy != 'Delete' || (has(self.parameters) && has(self.parameters.workload) && self.parameters.workload == 'DevTest')"
+                  message: "deletionPolicy Delete is only allowed with parameters.workload DevTest. Production landing zones are Orphan only."
               properties:
                 subscription:
                   type: string
@@ -93,7 +97,8 @@ spec:
                   description: >-
                     Name of an existing VirtualNetwork in this namespace whose subnet the private endpoints
                     of the landing zone's storage account and key vault use. Optional. That virtual network
-                    must be in the landing zone's subscription and have a subnet; until its subnet exists
+                    must belong to this landing zone's subscription (its spec.subscription must equal the
+                    landing zone's subscription; otherwise it is refused) and have a subnet; until its subnet exists
                     nothing that needs it is created and the condition VirtualNetworkResolved explains why.
                     The subnet is recorded in status.network and never changes afterwards. Use
                     spec.parameters.network instead to let the landing zone create its own virtual network;
@@ -106,9 +111,9 @@ spec:
                     What happens in Azure to the storage account and key vault of the landing zone when this
                     resource is deleted. Orphan (default): they stay in Azure with all their data, and only
                     the Kubernetes objects are removed. Delete: they are deleted in Azure (a key vault stays
-                    soft-deleted with purge protection). It never applies to the subscription: the
-                    subscription is never cancelled or deleted when a landing zone is deleted, whatever this
-                    field says. A new landing zone with the same name adopts the orphaned resources.
+                    soft-deleted with purge protection). Delete is allowed only with parameters.workload
+                    DevTest. It never applies to the subscription or the resource group: neither is ever
+                    cancelled or deleted when a landing zone is deleted, whatever this field says. A new landing zone with the same name adopts the orphaned resources.
                   enum: [Delete, Orphan]
                   default: Orphan
                 parameters:
@@ -135,9 +140,11 @@ spec:
                     resourceGroupName:
                       type: string
                       description: >-
-                        Resource group for the resources in the landing zone. Optional; defaults to the
-                        platform default resource group. Recorded in status.environment on first use and
-                        can't be changed afterwards.
+                        Name of the resource group the landing zone creates in its new subscription for its
+                        resources. Optional; defaults to rg-<name>, where <name> is the name of the landing
+                        zone. The platform's default resource group is not used. The group is never deleted
+                        and never locked. Recorded in status.environment on first use and can't be changed
+                        afterwards.
                       pattern: "^[a-zA-Z0-9._()-]*[a-zA-Z0-9_()-]$"
                       minLength: 1
                       maxLength: 90
@@ -261,7 +268,9 @@ spec:
                       description: Azure region in use.
                     resourceGroupName:
                       type: string
-                      description: Resource group in use.
+                      description: >-
+                        Resource group in use: the one composed in the landing zone's subscription
+                        (rg-<name> unless parameters.resourceGroupName is set). It is never deleted or locked.
                 network:
                   type: object
                   description: >-

@@ -1,0 +1,25 @@
+# Parameters are written out in full: crossplane render does not apply XRD defaults to the input XR.
+apiVersion: platform.a5n.io/v1alpha1
+kind: LandingZone
+metadata:
+  name: webshop
+  namespace: team-a
+  uid: 7a1b2c3d-0000-4000-8000-000000000010
+spec:
+  deletionPolicy: Orphan
+  parameters:
+    workload: DevTest
+    network:
+      size: small
+      peerToHub: true
+    storageAccount:
+      replication: ZRS
+      containers:
+        - name: raw
+        - name: curated
+    keyVault:
+      softDeleteDays: 30
+    tags:
+      costCenter: "0000"
+      owner: platform-team@example.com
+      environment: sandbox

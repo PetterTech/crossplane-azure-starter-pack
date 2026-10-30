@@ -1,0 +1,19 @@
+# The landing zone's own VirtualNetwork, resolved in its subscription and Ready.
+apiVersion: platform.a5n.io/v1alpha1
+kind: VirtualNetwork
+metadata:
+  name: webshop
+  namespace: team-a
+  uid: 7a1b2c3d-0000-4000-8000-000000000011
+  annotations:
+    crossplane.io/composition-resource-name: network
+  labels:
+    crossplane.io/composite: webshop
+spec:
+  subscription: webshop
+status:
+  subscription: webshop
+  subscriptionId: eeeeeeee-1111-2222-3333-ffffffffffff
+  subnetId: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-webshop/providers/Microsoft.Network/virtualNetworks/webshop/subnets/snet-default
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

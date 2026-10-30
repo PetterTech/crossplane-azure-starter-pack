@@ -1,0 +1,16 @@
+# The StorageAccount XR, Ready.
+apiVersion: platform.a5n.io/v1alpha1
+kind: StorageAccount
+metadata:
+  name: webshop
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: storage
+  labels:
+    crossplane.io/composite: webshop
+status:
+  accountName: stwebshop00000000000001
+  endpoints:
+    blob: https://stwebshop00000000000001.blob.core.windows.net/
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

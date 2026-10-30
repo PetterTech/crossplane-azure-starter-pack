@@ -1,0 +1,15 @@
+# The KeyVault XR, Ready.
+apiVersion: platform.a5n.io/v1alpha1
+kind: KeyVault
+metadata:
+  name: webshop
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: vault
+  labels:
+    crossplane.io/composite: webshop
+status:
+  vaultName: kvwebshop0000000000001
+  vaultUri: https://kvwebshop0000000000001.vault.azure.net/
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

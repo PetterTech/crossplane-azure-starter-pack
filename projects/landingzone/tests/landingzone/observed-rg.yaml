@@ -1,0 +1,16 @@
+# The resource group MR, Ready (reconcile 4).
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceGroup
+metadata:
+  name: webshop-rg
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: resourceGroup
+  labels:
+    crossplane.io/composite: webshop
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-webshop
+    location: northeurope
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

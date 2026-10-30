@@ -1,0 +1,36 @@
+# ... and the virtual network subnet (reconcile 5 onwards).
+apiVersion: platform.a5n.io/v1alpha1
+kind: LandingZone
+metadata:
+  name: webshop
+  namespace: team-a
+  uid: 7a1b2c3d-0000-4000-8000-000000000010
+spec:
+  deletionPolicy: Orphan
+  parameters:
+    workload: DevTest
+    network:
+      size: small
+      peerToHub: true
+    storageAccount:
+      replication: ZRS
+      containers:
+        - name: raw
+        - name: curated
+    keyVault:
+      softDeleteDays: 30
+    tags:
+      costCenter: "0000"
+      owner: platform-team@example.com
+      environment: sandbox
+status:
+  subscription: webshop
+  subscriptionUid: 4f0c1d2e-0000-4000-8000-00000000000a
+  subscriptionId: eeeeeeee-1111-2222-3333-ffffffffffff
+  providerConfigName: webshop
+  environment:
+    location: northeurope
+    resourceGroupName: rg-webshop
+  network:
+    virtualNetwork: webshop
+    subnetId: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-webshop/providers/Microsoft.Network/virtualNetworks/webshop/subnets/snet-default

@@ -8,22 +8,48 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # Cheap, whole-repo checks. Always runs.
   static:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Static validation
         run: BUILD=0 scripts/validate.sh
 
-  build:
-    needs: static
+  # Which projects need the heavier jobs; see scripts/ci-changes.sh for the dependency rules.
+  changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      projects: ${{ steps.diff.outputs.projects }}
+      build: ${{ steps.diff.outputs.build }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Detect changed projects
+        id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: scripts/ci-changes.sh "$BASE_SHA" | tee -a "$GITHUB_OUTPUT"
+
+  # Project build (foundation, services) and render/validate tests (all projects).
+  project:
+    name: project (${{ matrix.project }})
+    needs: [static, changes]
+    if: needs.changes.outputs.projects != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
-        # landingzone depends on unpublished foundation/services packages; it is built once they are released (PR 16/18)
-        project: [foundation, services]
+        project: ${{ fromJSON(needs.changes.outputs.projects) }}
     env:
       # renovate: datasource=github-releases depName=crossplane/cli
       CROSSPLANE_CLI_VERSION: v2.5.0
@@ -35,5 +61,72 @@ jobs:
           sudo mv crossplane /usr/local/bin/
           crossplane version --client
       - name: Build project
+        # landingzone depends on foundation and services packages that are not published yet;
+        # it is built once they are released (PR 18). Its render tests below still run.
+        if: contains(fromJSON(needs.changes.outputs.build), matrix.project)
         working-directory: projects/${{ matrix.project }}
         run: crossplane project build
+      - name: Render and validate tests
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: |
+          shopt -s nullglob
+          scripts=(projects/"$PROJECT"/tests/*/run.sh)
+          [ ${#scripts[@]} -gt 0 ] || { echo "no run.sh tests for $PROJECT" >&2; exit 1; }
+          for s in "${scripts[@]}"; do
+            echo "::group::$s"
+            "$s"
+            echo "::endgroup::"
+          done
+
+  # CEL transition rules and live composition checks on throwaway kind clusters.
+  kind:
+    name: kind (${{ matrix.project }})
+    needs: [static, changes]
+    if: needs.changes.outputs.projects != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        project: ${{ fromJSON(needs.changes.outputs.projects) }}
+    env:
+      # renovate: datasource=github-releases depName=kubernetes-sigs/kind
+      KIND_VERSION: v0.30.0
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install kind
+        run: |
+          curl -sfLo kind "https://github.com/kubernetes-sigs/kind/releases/download/${KIND_VERSION}/kind-linux-amd64"
+          sudo install -m 0755 kind /usr/local/bin/kind
+          rm kind
+          kind version
+      - name: CEL and live tests
+        env:
+          PROJECT: ${{ matrix.project }}
+        run: |
+          shopt -s nullglob
+          scripts=(projects/"$PROJECT"/tests/*/kind-cel.sh projects/"$PROJECT"/tests/*/live.sh)
+          [ ${#scripts[@]} -gt 0 ] || { echo "no kind tests for $PROJECT" >&2; exit 1; }
+          for s in "${scripts[@]}"; do
+            echo "::group::$s"
+            "$s"
+            echo "::endgroup::"
+          done
+
+  # Single required status check. Skipped matrix jobs are fine; failed or cancelled ones are not,
+  # and static and changes must have succeeded.
+  ci-ok:
+    if: always()
+    needs: [static, changes, project, kind]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check needed jobs
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          echo "$RESULTS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          echo "$RESULTS" | jq -e '
+            (.static.result == "success") and (.changes.result == "success")
+            and ([.[] | .result] | all(. == "success" or . == "skipped"))' >/dev/null

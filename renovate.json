@@ -19,10 +19,10 @@
     },
     {
       "customType": "regex",
-      "description": "Crossplane CLI version pinned in CI",
+      "description": "Crossplane CLI and kind versions pinned in CI",
       "fileMatch": ["^\\.github/workflows/.+\\.ya?ml$"],
       "matchStrings": [
-        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+)\\n\\s+CROSSPLANE_CLI_VERSION: (?<currentValue>v[^\\s]+)"
+        "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>[^\\s]+)\\n\\s+(?:CROSSPLANE_CLI|KIND)_VERSION: (?<currentValue>v[^\\s]+)"
       ]
     }
   ],

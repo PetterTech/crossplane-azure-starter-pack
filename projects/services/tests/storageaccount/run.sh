@@ -126,14 +126,15 @@ edit $T/xr-pinned.yaml "$WORK/xr-other-sub.yaml" 'd["spec"]["subscription"] = "s
 render "$WORK/xr-other-sub.yaml" "" "$T/env.yaml" "$WORK/subs-two.yaml" >"$WORK/name3.yaml"
 ruby -ryaml -e '
   n = ARGV.map { |f| YAML.load_stream(File.read(f)).find { |d| d["kind"] == "Account" }["metadata"]["annotations"]["crossplane.io/external-name"] }
-  abort n.inspect unless n[0] == n[1] && n[0] != n[2] && n.all? { |x| x =~ /\Ast[a-z0-9]{22}\z/ }' "$WORK/name1.yaml" "$WORK/name2.yaml" "$WORK/name3.yaml" && echo "PASS derived account name: deterministic, 24 chars lowercase alphanumeric, differs per Subscription"
+  abort n.inspect unless n[0] == n[1] && n[0] != n[2] && n.all? { |x| x =~ /\Ast[a-z0-9]{22}\z/ }' "$WORK/name1.yaml" "$WORK/name2.yaml" "$WORK/name3.yaml" && echo "PASS derived account name: deterministic, 24 chars lowercase alphanumeric, differs per Subscription" \
+  || { echo "FAIL derived account name"; exit 1; }
 
 # the derived name also depends on the XR name (the same name in the same namespace and Subscription derives the same account: adoption by name)
 edit $T/xr-pinned.yaml "$WORK/xr-other-name.yaml" 'd["metadata"]["name"] = "other"'
 render "$WORK/xr-other-name.yaml" >"$WORK/name4.yaml"
 ruby -ryaml -e '
   n = ARGV.map { |f| YAML.load_stream(File.read(f)).find { |d| d["kind"] == "Account" }["metadata"]["annotations"]["crossplane.io/external-name"] }
-  abort n.inspect unless n[0] != n[1] && n.all? { |x| x =~ /\Ast[a-z0-9]{22}\z/ }' "$WORK/name1.yaml" "$WORK/name4.yaml" && echo "PASS derived account name differs per XR name"
+  abort n.inspect unless n[0] != n[1] && n.all? { |x| x =~ /\Ast[a-z0-9]{22}\z/ }' "$WORK/name1.yaml" "$WORK/name4.yaml" && echo "PASS derived account name differs per XR name" || { echo "FAIL derived account name per XR name"; exit 1; }
 
 # a pinned status.accountName wins over the derived name; the pin wins over spec.parameters.name
 edit $T/xr-pinned.yaml "$WORK/xr-name-pinned.yaml" 'd["status"]["accountName"] = "stpinnedname0000000001"'
@@ -309,6 +310,6 @@ validate_accepts "deletionPolicy Delete" 'd["spec"]["deletionPolicy"] = "Delete"
 validate_accepts "public with allowedIpRanges" "$P[\"networking\"] = \"public\"; $P[\"allowedIpRanges\"] = [\"203.0.113.0/24\", \"198.51.100.7\"]"
 validate_accepts "Premium BlockBlobStorage LRS" "$P[\"accountTier\"] = \"Premium\"; $P[\"accountKind\"] = \"BlockBlobStorage\"; $P[\"replication\"] = \"LRS\""
 validate_accepts "a 24 character name" "$P[\"name\"] = \"a\" * 24"
-crossplane resource validate "$XRD" $T/xr.yaml >/dev/null && echo "PASS fixture validates against the XRD"
-crossplane resource validate "$XRD" examples/storageaccount/storageaccount.yaml >/dev/null && echo "PASS example validates against the XRD"
+crossplane resource validate "$XRD" $T/xr.yaml >/dev/null && echo "PASS fixture validates against the XRD" || { echo "FAIL fixture validates against the XRD"; exit 1; }
+crossplane resource validate "$XRD" examples/storageaccount/storageaccount.yaml >/dev/null && echo "PASS example validates against the XRD" || { echo "FAIL example validates against the XRD"; exit 1; }
 echo "all storageaccount render tests passed"

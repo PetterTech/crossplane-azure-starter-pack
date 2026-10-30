@@ -137,7 +137,8 @@ ruby -ryaml -e '
   abort envs.inspect unless envs.all? { |x| x =~ /\Aca[a-z0-9]{22}-env\z/ }
   app = envs[0].delete_suffix("-env")
   abort app.inspect unless app =~ /\A[a-z][a-z0-9]{23}\z/' "$WORK/name1.yaml" "$WORK/name5.yaml" "$WORK/name2.yaml" "$WORK/name3.yaml" "$WORK/name4.yaml" \
-  && echo "PASS derived names: deterministic, app 24 chars lowercase alphanumeric, environment <app>-env, differ per Subscription and per XR name"
+  && echo "PASS derived names: deterministic, app 24 chars lowercase alphanumeric, environment <app>-env, differ per Subscription and per XR name" \
+  || { echo "FAIL derived names"; exit 1; }
 
 # pinned status names win over the derived name and over a spec.parameters.name added later
 edit $T/xr-pinned.yaml "$WORK/xr-name-pinned.yaml" 'd["status"]["appName"] = "pinned-app-01"; d["status"]["environmentName"] = "pinned-env-01"'
@@ -324,6 +325,6 @@ validate_accepts "public with external ingress and deletionPolicy Delete" "$P[\"
 validate_accepts "zoneRedundant with infrastructureSubnetId" "$P[\"zoneRedundant\"] = true; $P[\"infrastructureSubnetId\"] = \"$INJECTED\""
 validate_accepts "a 32 character name" "$P[\"name\"] = \"a\" * 32"
 validate_accepts "a name with single hyphens" "$P[\"name\"] = \"my-app-01\""
-crossplane resource validate "$XRD" $T/xr.yaml >/dev/null && echo "PASS fixture validates against the XRD"
-crossplane resource validate "$XRD" examples/containerapp/containerapp.yaml >/dev/null && echo "PASS example validates against the XRD"
+crossplane resource validate "$XRD" $T/xr.yaml >/dev/null && echo "PASS fixture validates against the XRD" || { echo "FAIL fixture validates against the XRD"; exit 1; }
+crossplane resource validate "$XRD" examples/containerapp/containerapp.yaml >/dev/null && echo "PASS example validates against the XRD" || { echo "FAIL example validates against the XRD"; exit 1; }
 echo "all containerapp render tests passed"

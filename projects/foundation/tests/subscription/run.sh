@@ -140,5 +140,5 @@ if grep -q "reserved" <<<"$out"; then echo "PASS XRD rejects the name default"; 
 out=$(crossplane render "$WORK/xr-default.yaml" "$COMP" "$FUNCS" -e "$T/env.yaml" -o "$T/observed-vended.yaml" 2>&1 || true)
 if grep -q fatal <<<"$out"; then echo "PASS composition refuses a ProviderConfig named default"; else echo "FAIL composition renders a ProviderConfig named default"; exit 1; fi
 
-crossplane resource validate apis/subscription/definition.yaml examples/subscription/subscription.yaml >/dev/null && echo "PASS example validates against the XRD"
+crossplane resource validate apis/subscription/definition.yaml examples/subscription/subscription.yaml >/dev/null && echo "PASS example validates against the XRD" || { echo "FAIL example validates against the XRD"; exit 1; }
 echo "all subscription render tests passed"

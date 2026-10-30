@@ -236,8 +236,8 @@ validate_rejects "a tag key outside the allowlist" "Allowed tag keys" 'd["spec"]
 
 for p in 10.1.0.0/16 10.255.255.255/32 172.16.0.0/12 172.31.1.0/24 192.168.1.0/24 192.168.0.0/16; do
   edit $T/xr.yaml "$WORK/xr-ok.yaml" "d[\"spec\"][\"parameters\"][\"networkSecurityGroup\"][\"allowInbound\"][0][\"sourceAddressPrefix\"] = \"$p\""
-  crossplane resource validate "$XRD" "$WORK/xr-ok.yaml" >/dev/null && echo "PASS XRD accepts source $p"
+  crossplane resource validate "$XRD" "$WORK/xr-ok.yaml" >/dev/null && echo "PASS XRD accepts source $p" || { echo "FAIL XRD rejects source $p"; exit 1; }
 done
-crossplane resource validate "$XRD" $T/xr.yaml >/dev/null && echo "PASS fixture validates against the XRD"
-crossplane resource validate "$XRD" examples/virtualnetwork/virtualnetwork.yaml >/dev/null && echo "PASS example validates against the XRD"
+crossplane resource validate "$XRD" $T/xr.yaml >/dev/null && echo "PASS fixture validates against the XRD" || { echo "FAIL fixture validates against the XRD"; exit 1; }
+crossplane resource validate "$XRD" examples/virtualnetwork/virtualnetwork.yaml >/dev/null && echo "PASS example validates against the XRD" || { echo "FAIL example validates against the XRD"; exit 1; }
 echo "all virtualnetwork render tests passed"

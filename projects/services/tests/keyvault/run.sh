@@ -134,7 +134,8 @@ render "$WORK/xr-other-name.yaml" >"$WORK/name4.yaml"
 ruby -ryaml -e '
   n = ARGV.map { |f| YAML.load_stream(File.read(f)).find { |d| d["kind"] == "Vault" }["metadata"]["annotations"]["crossplane.io/external-name"] }
   abort n.inspect unless n[0] == n[1] && n[0] != n[2] && n[0] != n[3] && n[2] != n[3]
-  abort n.inspect unless n.all? { |x| x =~ /\A[a-z][a-z0-9]{21,22}\z/ && x.size == 24 && !x.include?("--") }' "$WORK/name1.yaml" "$WORK/name2.yaml" "$WORK/name3.yaml" "$WORK/name4.yaml" && echo "PASS derived vault name: deterministic, 24 chars lowercase starting with a letter, differs per Subscription and per XR name"
+  abort n.inspect unless n.all? { |x| x =~ /\A[a-z][a-z0-9]{23}\z/ && x.size == 24 && !x.include?("--") }' "$WORK/name1.yaml" "$WORK/name2.yaml" "$WORK/name3.yaml" "$WORK/name4.yaml" && echo "PASS derived vault name: deterministic, 24 chars lowercase starting with a letter, differs per Subscription and per XR name" \
+  || { echo "FAIL derived vault name"; exit 1; }
 
 # a pinned status.vaultName wins over the derived name and over a spec.parameters.name added later
 edit $T/xr-pinned.yaml "$WORK/xr-name-pinned.yaml" 'd["status"]["vaultName"] = "kv-pinned-name-01"'
@@ -299,6 +300,6 @@ validate_accepts "deletionPolicy Delete" 'd["spec"]["deletionPolicy"] = "Delete"
 validate_accepts "public with allowedIpRanges" "$P[\"networking\"] = \"public\"; $P[\"allowedIpRanges\"] = [\"203.0.113.0/24\", \"198.51.100.7\"]"
 validate_accepts "a 24 character name" "$P[\"name\"] = \"a\" * 24"
 validate_accepts "a name with single hyphens" "$P[\"name\"] = \"my-vault-01\""
-crossplane resource validate "$XRD" $T/xr.yaml >/dev/null && echo "PASS fixture validates against the XRD"
-crossplane resource validate "$XRD" examples/keyvault/keyvault.yaml >/dev/null && echo "PASS example validates against the XRD"
+crossplane resource validate "$XRD" $T/xr.yaml >/dev/null && echo "PASS fixture validates against the XRD" || { echo "FAIL fixture validates against the XRD"; exit 1; }
+crossplane resource validate "$XRD" examples/keyvault/keyvault.yaml >/dev/null && echo "PASS example validates against the XRD" || { echo "FAIL example validates against the XRD"; exit 1; }
 echo "all keyvault render tests passed"

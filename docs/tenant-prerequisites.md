@@ -37,14 +37,14 @@ MCSB / Defender recommendation names the benchmark control the item supports, wh
 | # | Control | MCSB / Defender recommendation | Level | Depended on by |
 |---|---|---|---|---|
 | 13 | Microsoft Defender plans, deployed with DeployIfNotExists: Defender for Storage and Defender for Key Vaults. Defender for Containers and CSPM are recommended; verify coverage in the first sandbox subscription, and do not treat Defender for Containers as the Container Apps runtime signal. After the first sandbox subscription, confirm in Defender for Cloud that the plans are on. | LT-1 | Storage and Key Vaults: mandatory for production, recommended in sandbox. Containers and CSPM: recommended | `StorageAccount`, `KeyVault`, `ContainerApp`, `Subscription` |
-| 14 | MCSB initiative assignment (audit). | GS-2 | Mandatory for production | `Subscription`, `LandingZone` |
-| 15 | Security contact. | LT-1 | Recommended | `Subscription` |
+| 14 | MCSB initiative assignment (audit). | PV-2, PV-1 | Mandatory for production | `Subscription`, `LandingZone` |
+| 15 | Security contact. | IR-2 | Recommended | `Subscription` |
 | 16 | Activity log export to Log Analytics; keep audit logs for at least one year. | LT-3 | Mandatory | `Subscription`, `LandingZone` |
-| 17 | Lock down the default management group with the same baseline, so an unmoved subscription is covered (D2). | GS-2 | Recommended | `Subscription` |
-| 18 | Policy: allowed locations (backstop for the optional `allowedLocations` key). | GS-2 | Mandatory | all APIs; `docs/environment-contract.md` |
+| 17 | Lock down the default management group with the same baseline, so an unmoved subscription is covered (D2). | PV-2 | Recommended | `Subscription` |
+| 18 | Policy: allowed locations (backstop for the optional `allowedLocations` key). | AM-2, PV-2 | Mandatory | all APIs; `docs/environment-contract.md` |
 | 19 | Policy: tags `costCenter` and `owner` (and `environment` for Container Apps) required. | | Recommended | all APIs |
 | 20 | Policy: diagnostic settings DeployIfNotExists for Key Vault (`AuditEvent`, `AzurePolicyEvaluationDetails`, `AllMetrics`), Storage and Container Apps environments to Log Analytics. Not part of any XR; without it Container Apps keep no logs (E15). | LT-3 | Mandatory for Key Vault; recommended for the rest | `KeyVault`, `StorageAccount`, `ContainerApp` |
-| 21 | Policy backstops (audit or deny): Key Vault soft delete, RBAC model, public access disabled, private link, key and secret expiry; Storage public network access disabled, shared key access disabled, secure transfer and minimum TLS version, blob soft delete and versioning, private link; Container Apps HTTPS only, private link or network injection (not both), allowed registries; "Managed identity should be enabled" as audit only. | NS-2, DP-3, DP-8 | Recommended | `StorageAccount`, `KeyVault`, `ContainerApp` |
+| 21 | Policy backstops (audit or deny): Key Vault soft delete, RBAC model, public access disabled, private link, key and secret expiry; Storage public network access disabled, shared key access disabled, secure transfer and minimum TLS version, blob soft delete and versioning, private link; Container Apps HTTPS only, private link or network injection (not both), allowed registries; "Managed identity should be enabled" as audit only. | NS-2, DP-3, DP-8, BR-2, IM-1 | Recommended | `StorageAccount`, `KeyVault`, `ContainerApp` |
 | 22 | Policy: DeployIfNotExists private DNS zone groups for private endpoints. No XR creates one. | NS-2 | Mandatory for private resources to resolve by name | `StorageAccount`, `KeyVault`, `ContainerApp`, `LandingZone` |
 | 27 | VNet and NSG flow logs, and diagnostic settings for network resources, to Log Analytics (E8). | LT-4 | Recommended | `VirtualNetwork`, `LandingZone` |
 | 28 | DDoS protection for public-facing resources and VNets (E8). | NS-5 | Recommended | `VirtualNetwork`, `ContainerApp` |

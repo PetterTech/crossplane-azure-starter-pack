@@ -6,7 +6,7 @@
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
-CLUSTER=pr10-cel
+CLUSTER=${CLUSTER:-pr10-cel}
 CTX=kind-$CLUSTER
 WORK=tests/storageaccount/.work-kind
 mkdir -p "$WORK"
@@ -80,7 +80,10 @@ expect_ok "observed outputs can change" st no-subnet '{"status":{"resourceId":"b
 
 mk imm '{"name":"stfixedname01","location":"westeurope","resourceGroupName":"rg"}'
 imm() { k -n t patch storageaccount imm --type merge -p "$1"; }
-expect_reject "spec.parameters.name can't change" "can't be changed" imm '{"spec":{"parameters":{"name":"stother"}}}'
+expect_reject "spec.parameters.name can't change" "can't be added, changed or removed" imm '{"spec":{"parameters":{"name":"stother"}}}'
+expect_reject "spec.parameters.name can't be removed" "can't be added, changed or removed" imm '{"spec":{"parameters":{"name":null}}}'
+mk noname
+expect_reject "spec.parameters.name can't be added to an existing resource" "can't be added, changed or removed" k -n t patch storageaccount noname --type merge -p '{"spec":{"parameters":{"name":"stlate"}}}'
 expect_reject "spec.parameters.location can't change" "can't be changed" imm '{"spec":{"parameters":{"location":"northeurope"}}}'
 expect_reject "spec.parameters.resourceGroupName can't change" "can't be changed" imm '{"spec":{"parameters":{"resourceGroupName":"other"}}}'
 expect_ok "networking can change" imm '{"spec":{"parameters":{"networking":"public"}}}'

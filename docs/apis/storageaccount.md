@@ -61,7 +61,7 @@ The composition creates no private DNS zone group, because the EnvironmentConfig
 
 ## Naming
 
-`spec.parameters.name` (3-24 lowercase letters and digits) is used as given. Otherwise the name is `st` plus 22 characters from `random.seededString`, seeded on namespace, name and subscriptionId: deterministic, always 24 lowercase alphanumeric characters, different per Subscription and per resource name. The name is recorded in `status.accountName` (write-once) and the composition reads it back, so it never changes even if the derivation changes.
+`spec.parameters.name` (3-24 lowercase letters and digits) is used as given on creation. It can only be set when the resource is created; adding, changing or removing it later is rejected (CEL), so an existing account is never swapped. Otherwise the name is `st` plus 22 characters from `random.seededString`, seeded on namespace, name and subscriptionId: deterministic, always 24 lowercase alphanumeric characters, different per Subscription and per resource name. The name is recorded in `status.accountName` (write-once) and the composition reads the pin first (pin, then `parameters.name`, then the derived name), so it never changes even if the derivation changes.
 
 ## Status
 

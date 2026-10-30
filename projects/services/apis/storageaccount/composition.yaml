@@ -78,7 +78,7 @@ spec:
               kind: Account
               metadata:
                 annotations:
-                  crossplane.io/external-name: '${schema.spec.parameters.?name.orValue(xr.status.?accountName.orValue("st" + random.seededString(8, schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/1") + random.seededString(8, schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/2") + random.seededString(6, schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/3")))}'
+                  crossplane.io/external-name: '${xr.status.?accountName.orValue(schema.spec.parameters.?name.orValue("st" + random.seededString(8, schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/1") + random.seededString(8, schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/2") + random.seededString(6, schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/3")))}'
               spec:
                 managementPolicies: '${schema.spec.deletionPolicy == "Delete" ? ["*"] : ["Create", "Observe", "Update", "LateInitialize"]}'
                 providerConfigRef:

@@ -135,13 +135,13 @@ ruby -ryaml -e '
   n = ARGV.map { |f| YAML.load_stream(File.read(f)).find { |d| d["kind"] == "Account" }["metadata"]["annotations"]["crossplane.io/external-name"] }
   abort n.inspect unless n[0] != n[1] && n.all? { |x| x =~ /\Ast[a-z0-9]{22}\z/ }' "$WORK/name1.yaml" "$WORK/name4.yaml" && echo "PASS derived account name differs per XR name"
 
-# a pinned status.accountName wins over the derived name; spec.parameters.name wins over both
+# a pinned status.accountName wins over the derived name; the pin wins over spec.parameters.name
 edit $T/xr-pinned.yaml "$WORK/xr-name-pinned.yaml" 'd["status"]["accountName"] = "stpinnedname0000000001"'
 check "pinned status.accountName wins over the derived name" "$WORK/xr-name-pinned.yaml" "" '
   abort res["account"]["metadata"]["annotations"].inspect unless res["account"]["metadata"]["annotations"]["crossplane.io/external-name"] == "stpinnedname0000000001"'
 edit "$WORK/xr-name-pinned.yaml" "$WORK/xr-name-both.yaml" 'd["spec"]["parameters"]["name"] = "mydataaccount01"'
-check "spec.parameters.name wins over a pinned status.accountName" "$WORK/xr-name-both.yaml" "" '
-  abort res["account"]["metadata"]["annotations"].inspect unless res["account"]["metadata"]["annotations"]["crossplane.io/external-name"] == "mydataaccount01"'
+check "pinned status.accountName wins over a spec.parameters.name added later (no second account)" "$WORK/xr-name-both.yaml" "" '
+  abort res["account"]["metadata"]["annotations"].inspect unless res["account"]["metadata"]["annotations"]["crossplane.io/external-name"] == "stpinnedname0000000001"'
 
 # deletionPolicy: Orphan leaves no Delete in managementPolicies (Account and containers), Delete is the default policy set
 edit $T/xr-pinned.yaml "$WORK/xr-delete.yaml" 'd["spec"]["deletionPolicy"] = "Delete"'

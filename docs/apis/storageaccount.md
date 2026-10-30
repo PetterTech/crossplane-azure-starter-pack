@@ -36,7 +36,7 @@ A private account without a valid `subnetId` (missing, placeholder or malformed)
 
 ## Private endpoint subnet
 
-`parameters.privateEndpointSubnetId` (immutable, `networking: private` only) puts the private endpoint in a subnet you name, which is how a `LandingZone` places it in its own virtual network (`docs/apis/landingzone.md`). The platform's shared subnet is rejected (`PrivateEndpointSubnetNotAllowed`). The identity of the subscription needs the subnet-join right on that subnet (E13); the platform pre-grants none for tenant-supplied subnets.
+`parameters.privateEndpointSubnetId` (immutable, `networking: private` only) puts the private endpoint in a subnet you name, which is how a `LandingZone` places it in its own virtual network (`docs/apis/landingzone.md`). The platform's shared subnet is rejected (`PrivateEndpointSubnetNotAllowed`), and so is a subnet outside the resource's own subscription (`PrivateEndpointSubnetWrongSubscription`). The identity of the subscription needs the subnet-join right on that subnet (E13); the platform pre-grants none for tenant-supplied subnets.
 
 ## Private DNS (known gap)
 

@@ -57,7 +57,8 @@ Known behaviour: `Ready` can show `True` for about one reconcile after the Subsc
 - The resolver is the trust boundary: Subscription controller check, uid and subscriptionId pins, subscription of the network and subnet, and the location allow list. Tenants cannot choose billing scope, management group, tenant, hub or default region (M1).
 - Self-service without approval (E3): unbounded subscription creation is limited only by the quota and Azure limits in the baseline (M5, M6).
 - The vending identity is shared with every per-subscription identity (E2, E9). No ManagementLock is composed (standing constraint), so the resource group has no lock.
-- Children are always private. Subnet join in the vended subscription is covered by Contributor (D13, E13), unverified.
+- Children are always private, and a tenant-set `privateEndpointSubnetId` of a child must be in that resource's own subscription (the resolver refuses another one). There is no DNS zone group: create `privatelink.blob.core.windows.net` and `privatelink.vaultcore.azure.net` (hub DNS or policy); until then the private endpoints are unreachable by name. Subnet join in the vended subscription is covered by Contributor (D13, E13), unverified.
+- Tags: the `a5n-*` tags of the children carry each child's own identity (its namespace, owner XR and uid), which differs from the resource group's tags.
 - Fail closed: unresolved subscription, environment, location, network or subnet are Fatal or a wait; nothing is composed.
 
 ## Unverified until the first sandbox deploy
@@ -66,7 +67,9 @@ Known behaviour: `Ready` can show `True` for about one reconcile after the Subsc
 - Crossplane's RBAC manager granting the XR kinds of the foundation and services Configurations on first install (D9).
 - Cross-subscription subnet join: private endpoints of the storage account and key vault in the new subscription's subnet, covered by Contributor (D13, E13).
 - Peering to the hub (`peerToHub`) from a new subscription.
-- The format of `resourceGroup.status.atProvider.location` that the children use as their location.
+- The format of `resourceGroup.status.atProvider.location` that the children use as their location. If it differs from the location the child accepts, the child fails closed (non-compliant but safe: nothing is created in a wrong place).
+- D13: subnet join in the new subscription's subnet under Contributor.
+- The Subscription stays in Azure (Orphan) when a landing zone is deleted.
 - The Ready flicker described above.
 - A Subscription cancelled by hand in Azure (the landing zone only sees the Subscription XR).
 - Live behaviour of `Orphan` and `Delete` against a real provider (only the policy lists were verified, on kind).

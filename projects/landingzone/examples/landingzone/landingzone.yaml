@@ -1,0 +1,44 @@
+apiVersion: platform.a5n.io/v1alpha1
+kind: LandingZone
+metadata:
+  name: pettertech-webshop
+  namespace: pettertech-sandbox
+spec:
+  # Creates a Subscription named pettertech-webshop (spec.subscription defaults to the name).
+  # A virtual network, a private storage account and a private key vault in it.
+  # Deleting the landing zone leaves the subscription and, by default, the data in Azure.
+  parameters:
+    workload: DevTest
+    network:
+      size: small
+    storageAccount:
+      replication: ZRS
+      containers:
+        - name: raw
+        - name: curated
+    keyVault:
+      softDeleteDays: 30
+    tags:
+      costCenter: "0000"
+      owner: platform-team@example.com
+      environment: sandbox
+---
+# Uses a virtual network that already exists in the landing zone's subscription instead of creating one.
+apiVersion: platform.a5n.io/v1alpha1
+kind: LandingZone
+metadata:
+  name: pettertech-reports
+  namespace: pettertech-sandbox
+spec:
+  subscription: pettertech-reports-sub
+  virtualNetwork: pettertech-reports-spoke
+  parameters:
+    keyVault: {}
+---
+# Minimal: only the subscription, named after the landing zone.
+apiVersion: platform.a5n.io/v1alpha1
+kind: LandingZone
+metadata:
+  name: pettertech-minimal
+  namespace: pettertech-sandbox
+spec: {}

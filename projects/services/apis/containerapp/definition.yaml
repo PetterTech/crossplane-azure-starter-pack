@@ -188,7 +188,7 @@ spec:
                       description: >-
                         Azure resource ID of a dedicated subnet for the environment (virtual network
                         injection). Optional. The subnet must be empty, delegated to
-                        Microsoft.App/environments and at least /23. The platform's shared private endpoint
+                        Microsoft.App/environments and at least /27 (the environment uses workload profiles). The platform's shared private endpoint
                         subnet can't be used. The platform grants no rights on it; the identity-admin
                         gate must allow the subnet join first. Can't be added, changed or removed after
                         creation.
@@ -294,9 +294,6 @@ spec:
                       description: >-
                         Platform subnet of the EnvironmentConfig at first composition, if the platform had one.
                         The private endpoint is composed from this value when it is needed.
-                    tenantId:
-                      type: string
-                      description: Entra tenant of the EnvironmentConfig at first composition.
                 appName:
                   type: string
                   description: Name of the container app in Azure, recorded once and never changed afterwards.

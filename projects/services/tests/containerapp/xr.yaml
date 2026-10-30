@@ -1,0 +1,23 @@
+# Parameters are written out in full: crossplane render does not apply XRD defaults to the input XR.
+apiVersion: platform.a5n.io/v1alpha1
+kind: ContainerApp
+metadata:
+  name: api
+  namespace: team-a
+  uid: 7a1b2c3d-0000-4000-8000-000000000004
+spec:
+  deletionPolicy: Orphan
+  parameters:
+    image: ghcr.io/example/hello-api:1.4.2
+    targetPort: 8080
+    ingress: internal
+    networking: private
+    size: small
+    minReplicas: 1
+    maxReplicas: 3
+    identity: none
+    zoneRedundant: false
+    tags:
+      costCenter: "0000"
+      owner: platform-team@example.com
+      environment: sandbox

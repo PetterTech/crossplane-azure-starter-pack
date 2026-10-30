@@ -1,0 +1,53 @@
+# Environment, app and private endpoint Ready (reconcile 4).
+apiVersion: containerapp.azure.m.upbound.io/v1beta1
+kind: Environment
+metadata:
+  name: api-environment
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: environment
+    crossplane.io/external-name: fixedapp01-env
+  labels:
+    crossplane.io/composite: api
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.App/managedEnvironments/fixedapp01-env
+    defaultDomain: calm-sea-0123.northeurope.azurecontainerapps.io
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: containerapp.azure.m.upbound.io/v1beta1
+kind: ContainerApp
+metadata:
+  name: api-app
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: app
+    crossplane.io/external-name: fixedapp01
+  labels:
+    crossplane.io/composite: api
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.App/containerApps/fixedapp01
+    ingress:
+      fqdn: fixedapp01.internal.calm-sea-0123.northeurope.azurecontainerapps.io
+    identity:
+      principalId: 00000000-aaaa-4bbb-8ccc-000000000001
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: PrivateEndpoint
+metadata:
+  name: api-privateendpoint
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: privateEndpoint
+    crossplane.io/external-name: fixedapp01-env-pe
+  labels:
+    crossplane.io/composite: api
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.Network/privateEndpoints/fixedapp01-env-pe
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

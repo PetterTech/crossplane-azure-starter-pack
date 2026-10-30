@@ -21,7 +21,7 @@ spec:
       owner: platform-team@example.com
       environment: sandbox
 ---
-# Private with VNet injection into a dedicated, delegated /23 subnet and zone redundancy.
+# Private with VNet injection into a dedicated subnet (at least /27, delegated to Microsoft.App/environments) and zone redundancy.
 apiVersion: platform.a5n.io/v1alpha1
 kind: ContainerApp
 metadata:

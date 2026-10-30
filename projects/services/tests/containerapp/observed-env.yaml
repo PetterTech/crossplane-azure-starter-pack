@@ -1,0 +1,17 @@
+# Environment MR Ready (reconcile 3).
+apiVersion: containerapp.azure.m.upbound.io/v1beta1
+kind: Environment
+metadata:
+  name: api-environment
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: environment
+    crossplane.io/external-name: fixedapp01-env
+  labels:
+    crossplane.io/composite: api
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.App/managedEnvironments/fixedapp01-env
+    defaultDomain: calm-sea-0123.northeurope.azurecontainerapps.io
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

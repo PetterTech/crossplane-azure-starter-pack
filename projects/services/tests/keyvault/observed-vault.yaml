@@ -1,0 +1,17 @@
+# Vault MR Ready (reconcile 3).
+apiVersion: keyvault.azure.m.upbound.io/v1beta1
+kind: Vault
+metadata:
+  name: secrets-vault
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: vault
+    crossplane.io/external-name: kvfixedname01
+  labels:
+    crossplane.io/composite: secrets
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.KeyVault/vaults/kvfixedname01
+    vaultUri: https://kvfixedname01.vault.azure.net/
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

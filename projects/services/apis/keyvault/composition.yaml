@@ -1,0 +1,347 @@
+# KeyVault: a hardened key vault and, only when networking is private, a private endpoint for the
+# vault in the platform subnet.
+#
+# Pipeline: environment -> kro -> resolve-subscription (go-templating, shared) -> auto-ready.
+# There is no patch-and-transform step: the private endpoint depends on the observed vault ID,
+# and it is optional on an enum, which P&T can't omit. The whole graph is in one function-kro
+# step (spike #7), as in StorageAccount and VirtualNetwork.
+#
+# Order matters (spike #14): function-kro replaces the desired XR status of earlier steps, so
+# the resolver runs after it and merges the pin into kro's status. kro can't see the environment
+# context, so it reads one externalRef, `xr` (this XR): the pin (subscription, vaultName,
+# environment incl. tenantId and the private endpoint subnetId) written by the resolver, seen one
+# reconcile later, so nothing is composed on the first reconcile. The resolver fails (Fatal) on
+# every unresolved path, including a missing tenantId and, for a private vault that is not
+# pinned yet, a missing subnetId, so nothing is composed and auto-ready is never reached with an
+# empty graph.
+#
+# Gates are on spec (networking) and on the write-once pin only (spike #3, #5); never on
+# observed status. The vault name is read in this order: pinned status.vaultName, then
+# spec.parameters.name (immutable, XRD CEL), then the derived name, so a name can never be swapped
+# under an existing vault.
+#
+# Every composed resource uses the namespaced ProviderConfig named after the resolved
+# Subscription (never default). No ManagementLock (standing constraint). No role assignment
+# (Contributor can't assign roles, E1). No private DNS zone group: the platform has no zone ID in
+# the environment contract (D6, docs/apis/keyvault.md).
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: keyvaults.platform.a5n.io
+  labels:
+    platform.a5n.io/api: keyvault
+spec:
+  compositeTypeRef:
+    apiVersion: platform.a5n.io/v1alpha1
+    kind: KeyVault
+  mode: Pipeline
+  pipeline:
+    - step: environment
+      functionRef:
+        name: function-environment-configs
+      input:
+        apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+        kind: Input
+        spec:
+          environmentConfigs:
+            - type: Reference
+              ref:
+                name: platform-environment
+
+    - step: compose
+      functionRef:
+        name: function-kro
+      input:
+        apiVersion: kro.fn.crossplane.io/v1alpha1
+        kind: ResourceGraph
+        status:
+          vaultName: '${vault.metadata.annotations["crossplane.io/external-name"]}'
+          resourceId: '${vault.status.atProvider.id}'
+          privateEndpointId: '${privateEndpoint.status.atProvider.id}'
+          vaultUri: '${vault.status.atProvider.vaultUri}'
+        resources:
+          - id: xr
+            externalRef:
+              apiVersion: platform.a5n.io/v1alpha1
+              kind: KeyVault
+              metadata:
+                name: '${schema.metadata.name}'
+                namespace: '${schema.metadata.namespace}'
+
+          # Hardening is fixed in the template, no toggles: Azure RBAC authorization (no access
+          # policies), purge protection and soft delete always on, no Azure-services bypass.
+          # The firewall denies by default; allowedIpRanges only exists with networking public
+          # (XRD CEL), and public access is on only then. The tenant comes from the pin.
+          - id: vault
+            readyWhen:
+              - '${vault.status.?conditions.orValue([]).exists(c, c.type == "Ready" && c.status == "True")}'
+            template:
+              apiVersion: keyvault.azure.m.upbound.io/v1beta1
+              kind: Vault
+              metadata:
+                annotations:
+                  crossplane.io/external-name: '${xr.status.?vaultName.orValue(schema.spec.parameters.?name.orValue("kv" + random.seededString(8, "kv/" + schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/1") + random.seededString(8, "kv/" + schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/2") + random.seededString(6, "kv/" + schema.metadata.namespace + "/" + schema.metadata.name + "/" + xr.status.subscriptionId + "/3")))}'
+              spec:
+                managementPolicies: '${schema.spec.deletionPolicy == "Delete" ? ["*"] : ["Create", "Observe", "Update", "LateInitialize"]}'
+                providerConfigRef:
+                  kind: ProviderConfig
+                  name: '${xr.status.subscription}'
+                forProvider:
+                  location: '${xr.status.environment.location}'
+                  resourceGroupName: '${xr.status.environment.resourceGroupName}'
+                  tenantId: '${xr.status.environment.tenantId}'
+                  skuName: standard
+                  rbacAuthorizationEnabled: true
+                  purgeProtectionEnabled: true
+                  softDeleteRetentionDays: '${double(schema.spec.parameters.softDeleteDays)}'
+                  enabledForDeployment: false
+                  enabledForDiskEncryption: false
+                  enabledForTemplateDeployment: false
+                  publicNetworkAccessEnabled: '${schema.spec.parameters.networking == "public"}'
+                  networkAcls:
+                    defaultAction: Deny
+                    bypass: None
+                    ipRules: '${schema.spec.parameters.networking == "public" ? schema.spec.parameters.?allowedIpRanges.orValue([]) : []}'
+                  tags: '${{"a5n-namespace": schema.metadata.namespace, "a5n-owner-xr": schema.metadata.name, "a5n-xr-uid": schema.metadata.uid, ?"costCenter": schema.spec.parameters.?tags.costCenter, ?"owner": schema.spec.parameters.?tags.owner, ?"environment": schema.spec.parameters.?tags.environment}}'
+
+          # Only when networking is private and the platform subnet is pinned: no empty
+          # endpoint is ever composed.
+          - id: privateEndpoint
+            includeWhen:
+              - '${schema.spec.parameters.networking == "private" && xr.status.?environment.subnetId.orValue("").startsWith("/subscriptions/")}'
+            readyWhen:
+              - '${privateEndpoint.status.?conditions.orValue([]).exists(c, c.type == "Ready" && c.status == "True")}'
+            template:
+              apiVersion: network.azure.m.upbound.io/v1beta1
+              kind: PrivateEndpoint
+              metadata:
+                annotations:
+                  crossplane.io/external-name: '${vault.metadata.annotations["crossplane.io/external-name"] + "-pe"}'
+              spec:
+                providerConfigRef:
+                  kind: ProviderConfig
+                  name: '${xr.status.subscription}'
+                forProvider:
+                  location: '${xr.status.environment.location}'
+                  resourceGroupName: '${xr.status.environment.resourceGroupName}'
+                  subnetId: '${xr.status.environment.subnetId}'
+                  privateServiceConnection:
+                    name: keyvault
+                    isManualConnection: false
+                    privateConnectionResourceId: '${vault.status.atProvider.id}'
+                    subresourceNames: ["vault"]
+                  tags: '${{"a5n-namespace": schema.metadata.namespace, "a5n-owner-xr": schema.metadata.name, "a5n-xr-uid": schema.metadata.uid}}'
+
+    # The one go-templating step in a building block (E6); identical in every building block.
+    # Source: projects/foundation/apis/_shared/resolver.gotmpl, inlined by sync-resolver.sh.
+    - step: resolve-subscription
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+    # BEGIN resolver
+          template: |
+            {{- /*
+              Shared subscription resolver (accepted exception E6). Identical in every building-block
+              composition (step "resolve-subscription"); packages cannot share files, so the text is inlined
+              and scripts/validate.sh checks it against projects/foundation/apis/_shared/resolver.gotmpl.
+              Behaviour is documented in projects/foundation/apis/_shared/resolver.md. Do not edit one copy.
+            */ -}}
+            {{- $xr := .observed.composite.resource -}}
+            {{- $kind := $xr.kind -}}
+            {{- $ns := dig "metadata" "namespace" "" $xr -}}
+            {{- $spec := get $xr "spec" | default dict -}}
+            {{- $params := get $spec "parameters" | default dict -}}
+            {{- $st := get $xr "status" | default dict -}}
+            {{- $env := index .context "apiextensions.crossplane.io/environment" | default dict -}}
+            {{- $er := .extraResources | default dict -}}
+            {{- if not $ns }}{{ fail "SubscriptionNotFound: the resource has no namespace" }}{{ end }}
+            ---
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              subs:
+                apiVersion: platform.a5n.io/v1alpha1
+                kind: Subscription
+                namespace: {{ $ns | quote }}
+            {{- /* The first call of a reconcile has no result yet: only the requirement above is returned. */}}
+            {{- if hasKey $er "subs" }}
+            {{- $subs := list -}}
+            {{- range $i := (get (get $er "subs") "items" | default list) }}{{ $subs = append $subs $i.resource }}{{ end -}}
+            {{- $names := list -}}
+            {{- $ready := list -}}
+            {{- range $s := $subs -}}
+              {{- $names = append $names $s.metadata.name -}}
+              {{- $ok := false -}}
+              {{- range $c := (get ($s.status | default dict) "conditions" | default list) -}}
+                {{- if and (eq $c.type "Ready") (eq $c.status "True") }}{{ $ok = true }}{{ end -}}
+              {{- end -}}
+              {{- if and $ok (not (hasKey $s.metadata "deletionTimestamp")) }}{{ $ready = append $ready $s }}{{ end -}}
+            {{- end -}}
+
+            {{- /* 1. Subscription: pin first, then spec.subscription, then the only Ready Subscription. */ -}}
+            {{- $pinned := get $st "subscription" | default "" -}}
+            {{- $want := get $spec "subscription" | default "" -}}
+            {{- $chosen := dict -}}
+            {{- if $pinned -}}
+              {{- if and $want (ne $want $pinned) }}{{ fail (printf "SubscriptionMismatch: spec.subscription is '%s' but this resource is pinned to Subscription '%s'. Create a new resource to move." $want $pinned) }}{{ end -}}
+              {{- range $s := $subs }}{{ if eq $s.metadata.name $pinned }}{{ $chosen = $s }}{{ end }}{{ end -}}
+              {{- if not $chosen }}{{ fail (printf "SubscriptionChanged: pinned Subscription '%s' was not found in namespace '%s'. Existing resources are kept." $pinned $ns) }}{{ end -}}
+              {{- if or (not (get $st "subscriptionUid")) (not (get $st "subscriptionId")) }}{{ fail (printf "SubscriptionChanged: the pin of Subscription '%s' is incomplete. Delete and recreate this resource." $pinned) }}{{ end -}}
+              {{- if ne $chosen.metadata.uid (get $st "subscriptionUid") }}{{ fail (printf "SubscriptionChanged: Subscription '%s' has a different uid than the pin (deleted and recreated?). Existing resources are kept." $pinned) }}{{ end -}}
+              {{- if ne (get ($chosen.status | default dict) "subscriptionId" | default "") (get $st "subscriptionId") }}{{ fail (printf "SubscriptionChanged: Subscription '%s' reports a different subscriptionId than the pin. Existing resources are kept." $pinned) }}{{ end -}}
+              {{- $isReady := false -}}
+              {{- range $s := $ready }}{{ if eq $s.metadata.name $pinned }}{{ $isReady = true }}{{ end }}{{ end -}}
+              {{- if not $isReady }}{{ fail (printf "SubscriptionNotReady: pinned Subscription '%s' is not Ready or is being deleted. Existing resources are kept." $pinned) }}{{ end -}}
+            {{- else if $want -}}
+              {{- range $s := $subs }}{{ if eq $s.metadata.name $want }}{{ $chosen = $s }}{{ end }}{{ end -}}
+              {{- if not $chosen }}{{ fail (printf "SubscriptionNotFound: Subscription '%s' (spec.subscription) was not found in namespace '%s'." $want $ns) }}{{ end -}}
+              {{- $isReady := false -}}
+              {{- range $s := $ready }}{{ if eq $s.metadata.name $want }}{{ $isReady = true }}{{ end }}{{ end -}}
+              {{- if not $isReady }}{{ fail (printf "SubscriptionNotReady: Subscription '%s' is not Ready or is being deleted." $want) }}{{ end -}}
+            {{- else if eq (len $ready) 1 -}}
+              {{- $chosen = index $ready 0 -}}
+            {{- else if gt (len $ready) 1 -}}
+              {{- $rn := list -}}{{- range $s := $ready }}{{ $rn = append $rn $s.metadata.name }}{{ end -}}
+              {{- fail (printf "SubscriptionAmbiguous: found %d Ready Subscriptions (%s). Set spec.subscription to choose one." (len $ready) (join ", " (sortAlpha $rn))) -}}
+            {{- else if $subs -}}
+              {{- fail (printf "SubscriptionNotReady: no Subscription in namespace '%s' is Ready (found: %s)." $ns (join ", " (sortAlpha $names))) -}}
+            {{- else -}}
+              {{- fail (printf "SubscriptionNotFound: no Subscription found in namespace '%s'. Create one, or set spec.subscription." $ns) -}}
+            {{- end -}}
+            {{- $subID := get ($chosen.status | default dict) "subscriptionId" | default "" -}}
+            {{- if not $subID }}{{ fail (printf "SubscriptionNotReady: Subscription '%s' has no status.subscriptionId yet." $chosen.metadata.name) }}{{ end -}}
+
+            {{- /* 2. Environment: effective location and resource group, pinned on first use. */ -}}
+            {{- $pinEnv := get $st "environment" | default dict -}}
+            {{- $loc := get $pinEnv "location" | default "" -}}
+            {{- $rg := get $pinEnv "resourceGroupName" | default "" -}}
+            {{- $locOverride := get $params "location" | default "" -}}
+            {{- $rgOverride := get $params "resourceGroupName" | default "" -}}
+            {{- $envLoc := get $env "location" | default "" -}}
+            {{- $envRg := get $env "resourceGroupName" | default "" -}}
+            {{- if not $loc }}{{ $loc = $locOverride | default $envLoc }}{{ end -}}
+            {{- if not $rg }}{{ $rg = $rgOverride | default $envRg }}{{ end -}}
+            {{- if not (regexMatch `^[a-z][a-z0-9]*$` $loc) }}{{ fail (printf "EnvironmentInvalid: the location %q is not a valid region. Set it in the platform-environment EnvironmentConfig or spec.parameters.location." $loc) }}{{ end -}}
+            {{- if not (regexMatch `^[A-Za-z0-9._()-]*[A-Za-z0-9_()-]$` $rg) }}{{ fail (printf "EnvironmentInvalid: the resource group %q is not valid. Set resourceGroupName in the platform-environment EnvironmentConfig or spec.parameters.resourceGroupName." $rg) }}{{ end -}}
+            {{- if not (get $pinEnv "location") -}}
+              {{- $allowed := get $env "allowedLocations" | default "" -}}
+              {{- if $allowed -}}
+                {{- $list := list -}}
+                {{- range $a := splitList "," $allowed }}{{ $list = append $list (trim $a | lower) }}{{ end -}}
+                {{- if not (has $loc $list) }}{{ fail (printf "LocationNotAllowed: location '%s' is not in the allowed locations (%s)." $loc (join ", " $list)) }}{{ end -}}
+              {{- end -}}
+            {{- end -}}
+            {{- /* Drift is informational: the pin always wins. A spec override equals the pin (immutable). */ -}}
+            {{- $drift := list -}}
+            {{- if and (get $pinEnv "location") (not $locOverride) (ne $envLoc (get $pinEnv "location")) }}{{ $drift = append $drift (printf "location is '%s' in the EnvironmentConfig, '%s' in use" $envLoc $loc) }}{{ end -}}
+            {{- if and (get $pinEnv "resourceGroupName") (not $rgOverride) (ne $envRg (get $pinEnv "resourceGroupName")) }}{{ $drift = append $drift (printf "resourceGroupName is '%s' in the EnvironmentConfig, '%s' in use" $envRg $rg) }}{{ end -}}
+
+            {{- /* 3. Keys this kind needs. Add a row when a building block starts using another key. The pinned value counts, so a later change of the EnvironmentConfig never fails a pinned resource. */ -}}
+            {{- $required := dict "VirtualNetwork" (dict "ipamPoolId" `(?i)^/subscriptions/[^/]+/resourcegroups/[^/]+/providers/microsoft\.network/networkmanagers/[^/]+/ipampools/[^/]+$`) "KeyVault" (dict "tenantId" `(?i)^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$`) -}}
+            {{- range $key, $pattern := (get $required $kind | default dict) -}}
+              {{- if not (regexMatch $pattern (get $pinEnv $key | default (get $env $key | default ""))) }}{{ fail (printf "EnvironmentInvalid: key %q is missing or malformed in the platform-environment EnvironmentConfig." $key) }}{{ end -}}
+            {{- end -}}
+            {{- /* status.environment is write-once as a whole object: once pinned it is re-emitted unchanged, and kro (which cannot read the environment context) reads it from there, one reconcile later. */ -}}
+            {{- $pinned := ne (get $pinEnv "location" | default "") "" -}}
+            {{- $ipam := "" -}}
+            {{- $hubOut := "" -}}
+            {{- $envMsg := "The platform environment is valid." -}}
+            {{- $envOK := true -}}
+            {{- $envReason := "EnvironmentValid" -}}
+            {{- $subnet := "" -}}
+            {{- $tenant := "" -}}
+            {{- if or (eq $kind "StorageAccount") (eq $kind "KeyVault") -}}
+              {{- /* The private endpoint subnet (and, for KeyVault, the tenant). With networking private, an unpinned resource and a missing, placeholder or malformed subnetId is Fatal (nothing is composed or pinned, Ready is not reported). A pinned one keeps its pin and reports EnvironmentValid=False. */ -}}
+              {{- $noun := ternary "storage account" "key vault" (eq $kind "StorageAccount") -}}
+              {{- if eq $kind "KeyVault" -}}
+                {{- $tenant = get $pinEnv "tenantId" | default (get $env "tenantId" | default "") -}}
+                {{- if and $pinned (ne $tenant (get $env "tenantId" | default "")) }}{{ $drift = append $drift "tenantId in the EnvironmentConfig differs from the pinned tenant; the pinned tenant is kept" }}{{ end -}}
+              {{- end -}}
+              {{- $private := eq (get $params "networking" | default "private") "private" -}}
+              {{- $liveSubnet := get $env "subnetId" | default "" -}}
+              {{- if not (regexMatch `(?i)^/subscriptions/[^/]+/resourcegroups/[^/]+/providers/microsoft\.network/virtualnetworks/[^/]+/subnets/[^/]+$` $liveSubnet) }}{{ $liveSubnet = "" }}{{ end -}}
+              {{- if $pinned -}}
+                {{- $subnet = get $pinEnv "subnetId" | default "" -}}
+                {{- if ne $subnet $liveSubnet }}{{ $drift = append $drift (ternary (printf "a subnetId was added to the EnvironmentConfig after this %s was created and is not used" $noun) "the subnetId in the EnvironmentConfig differs from the pinned subnet; the pinned subnet is kept" (eq $subnet "")) }}{{ end -}}
+              {{- else -}}
+                {{- $subnet = $liveSubnet -}}
+              {{- end -}}
+              {{- if and $private (not $subnet) -}}
+                {{- if not $pinned }}{{ fail "SubnetNotConfigured: networking is private but the platform-environment EnvironmentConfig has no valid subnetId (missing, a placeholder or malformed). Nothing is created or pinned until the platform sets it." }}{{ end -}}
+                {{- $envOK = false -}}
+                {{- $envReason = "SubnetNotConfigured" -}}
+                {{- $envMsg = printf "networking is private but the platform had no valid subnetId configured when this %s was created. The private endpoint is not created; recreate the %s after the platform sets subnetId." $noun $noun -}}
+              {{- end -}}
+            {{- end -}}
+            {{- if eq $kind "VirtualNetwork" -}}
+              {{- $peer := true -}}
+              {{- if hasKey $params "peerToHub" }}{{ $peer = get $params "peerToHub" }}{{ end -}}
+              {{- $liveHub := get $env "hubVirtualHubId" | default "" -}}
+              {{- if hasPrefix "<" $liveHub }}{{ $liveHub = "" }}{{ end -}}
+              {{- $hubRe := `(?i)^/subscriptions/[^/]+/resourcegroups/[^/]+/providers/microsoft\.network/virtualhubs/[^/]+$` -}}
+              {{- if $pinned -}}
+                {{- $ipam = get $pinEnv "ipamPoolId" | default "" -}}
+                {{- $hubOut = get $pinEnv "hubVirtualHubId" | default "" -}}
+                {{- if ne $ipam (get $env "ipamPoolId" | default "") }}{{ $drift = append $drift "ipamPoolId differs in the EnvironmentConfig; the pinned pool is kept" }}{{ end -}}
+                {{- if ne $hubOut $liveHub }}{{ $drift = append $drift (ternary "a hub was added to the EnvironmentConfig after this virtual network was created and is not used" "the hub in the EnvironmentConfig differs from the pinned hub; the pinned hub is kept" (eq $hubOut "")) }}{{ end -}}
+              {{- else -}}
+                {{- $ipam = get $env "ipamPoolId" | default "" -}}
+                {{- if and $liveHub (not (regexMatch $hubRe $liveHub)) }}{{ if $peer }}{{ fail "EnvironmentInvalid: key \"hubVirtualHubId\" is malformed in the platform-environment EnvironmentConfig." }}{{ end }}{{ else }}{{ $hubOut = $liveHub }}{{ end -}}
+              {{- end -}}
+              {{- if and $peer (not $hubOut) -}}
+                {{- $envOK = false -}}
+                {{- $envReason = "HubNotConfigured" -}}
+                {{- $envMsg = ternary "peerToHub is true but the platform had no hubVirtualHubId configured when this virtual network was created. The hub connection is not created." "peerToHub is true but the platform has no hubVirtualHubId configured. The hub connection is not created." $pinned -}}
+              {{- end -}}
+            {{- end }}
+            ---
+            apiVersion: {{ $xr.apiVersion }}
+            kind: {{ $kind }}
+            status:
+              subscription: {{ $chosen.metadata.name | quote }}
+              subscriptionUid: {{ $chosen.metadata.uid | quote }}
+              subscriptionId: {{ $subID | quote }}
+              environment:
+                location: {{ $loc | quote }}
+                resourceGroupName: {{ $rg | quote }}
+            {{- if and (or (eq $kind "StorageAccount") (eq $kind "KeyVault")) $subnet }}
+                subnetId: {{ $subnet | quote }}
+            {{- end }}
+            {{- if eq $kind "KeyVault" }}
+                tenantId: {{ $tenant | quote }}
+            {{- end }}
+            {{- if eq $kind "VirtualNetwork" }}
+                ipamPoolId: {{ $ipam | quote }}
+            {{- if $hubOut }}
+                hubVirtualHubId: {{ $hubOut | quote }}
+            {{- end }}
+            {{- end }}
+            ---
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ClaimConditions
+            conditions:
+              - type: SubscriptionResolved
+                status: "True"
+                reason: SubscriptionResolved
+                message: {{ printf "Using Subscription '%s' (%s)." $chosen.metadata.name (ternary "set in spec.subscription" "resolved automatically" (ne $want "")) | quote }}
+                target: Composite
+              - type: EnvironmentValid
+                status: {{ ternary "True" "False" $envOK | quote }}
+                reason: {{ $envReason }}
+                message: {{ $envMsg | quote }}
+                target: Composite
+              - type: EnvironmentDrift
+                status: {{ ternary "True" "False" (gt (len $drift) 0) | quote }}
+                reason: {{ ternary "EnvironmentChanged" "InSync" (gt (len $drift) 0) }}
+                message: {{ ternary (printf "Pinned values are kept: %s." (join "; " $drift)) "The environment matches the pinned values." (gt (len $drift) 0) | quote }}
+                target: Composite
+            {{- end }}
+    # END resolver
+
+    - step: automatically-detect-readiness
+      functionRef:
+        name: function-auto-ready

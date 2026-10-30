@@ -98,13 +98,13 @@ spec:
                     name:
                       type: string
                       description: >-
-                        Key vault name in Azure (globally unique). 3 to 24 letters, digits and hyphens;
+                        Key vault name in Azure (globally unique). 3 to 24 lowercase letters, digits and hyphens;
                         starts with a letter, ends with a letter or digit, no two hyphens in a row.
                         Optional; the platform derives a unique name from the namespace and the name of this
                         resource. Can't be changed after creation.
                       minLength: 3
                       maxLength: 24
-                      pattern: "^[a-zA-Z]([a-zA-Z0-9]|-[a-zA-Z0-9])*$"
+                      pattern: "^[a-z]([a-z0-9]|-[a-z0-9])*$"
                     location:
                       type: string
                       description: >-
@@ -215,6 +215,9 @@ spec:
                       description: >-
                         Subnet of the EnvironmentConfig at first composition, if the platform had one. The
                         private endpoint is composed from this value when networking is private.
+                    tenantId:
+                      type: string
+                      description: Entra tenant of the EnvironmentConfig at first composition; the vault is created in it.
                 vaultName:
                   type: string
                   description: Name of the key vault in Azure, recorded once and never changed afterwards.

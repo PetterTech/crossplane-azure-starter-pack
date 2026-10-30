@@ -1,0 +1,25 @@
+# The same XR after the resolver pinned subscription and environment (reconcile 2 onwards).
+apiVersion: platform.a5n.io/v1alpha1
+kind: KeyVault
+metadata:
+  name: secrets
+  namespace: team-a
+  uid: 7a1b2c3d-0000-4000-8000-000000000003
+spec:
+  deletionPolicy: Orphan
+  parameters:
+    networking: private
+    softDeleteDays: 90
+    tags:
+      costCenter: "0000"
+      owner: platform-team@example.com
+      environment: sandbox
+status:
+  subscription: sub-a
+  subscriptionUid: 4f0c1d2e-0000-4000-8000-00000000000a
+  subscriptionId: eeeeeeee-1111-2222-3333-ffffffffffff
+  environment:
+    location: northeurope
+    resourceGroupName: rg-pinned
+    tenantId: 99999999-aaaa-4bbb-8ccc-dddddddddddd
+    subnetId: /subscriptions/cccccccc-1111-2222-3333-dddddddddddd/resourceGroups/rg-test/providers/Microsoft.Network/virtualNetworks/vnet-test/subnets/snet-pe

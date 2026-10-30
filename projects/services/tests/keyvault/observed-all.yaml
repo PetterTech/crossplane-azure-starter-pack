@@ -1,0 +1,33 @@
+# Vault and private endpoint Ready (reconcile 4).
+apiVersion: keyvault.azure.m.upbound.io/v1beta1
+kind: Vault
+metadata:
+  name: secrets-vault
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: vault
+    crossplane.io/external-name: kvfixedname01
+  labels:
+    crossplane.io/composite: secrets
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.KeyVault/vaults/kvfixedname01
+    vaultUri: https://kvfixedname01.vault.azure.net/
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: PrivateEndpoint
+metadata:
+  name: secrets-pe
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: privateEndpoint
+    crossplane.io/external-name: kvfixedname01-pe
+  labels:
+    crossplane.io/composite: secrets
+status:
+  atProvider:
+    id: /subscriptions/eeeeeeee-1111-2222-3333-ffffffffffff/resourceGroups/rg-pinned/providers/Microsoft.Network/privateEndpoints/kvfixedname01-pe
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

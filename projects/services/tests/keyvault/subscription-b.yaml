@@ -1,0 +1,12 @@
+# A second Ready Subscription in team-a.
+apiVersion: platform.a5n.io/v1alpha1
+kind: Subscription
+metadata:
+  name: sub-b
+  namespace: team-a
+  uid: 4f0c1d2e-0000-4000-8000-00000000000b
+spec: {}
+status:
+  subscriptionId: 99999999-1111-2222-3333-ffffffffffff
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

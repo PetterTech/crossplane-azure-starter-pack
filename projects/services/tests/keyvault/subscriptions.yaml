@@ -1,0 +1,24 @@
+# One Ready Subscription XR in the XR's namespace, one in another namespace (must be ignored).
+apiVersion: platform.a5n.io/v1alpha1
+kind: Subscription
+metadata:
+  name: sub-a
+  namespace: team-a
+  uid: 4f0c1d2e-0000-4000-8000-00000000000a
+spec: {}
+status:
+  subscriptionId: eeeeeeee-1111-2222-3333-ffffffffffff
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}
+---
+apiVersion: platform.a5n.io/v1alpha1
+kind: Subscription
+metadata:
+  name: sub-other-namespace
+  namespace: team-b
+  uid: 4f0c1d2e-0000-4000-8000-0000000000bb
+spec: {}
+status:
+  subscriptionId: dddddddd-1111-2222-3333-ffffffffffff
+  conditions:
+    - {type: Ready, status: "True", reason: Available, lastTransitionTime: "2024-01-01T00:00:00Z"}

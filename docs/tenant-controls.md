@@ -61,3 +61,15 @@ After the first sandbox subscription is vended and a VirtualNetwork is Ready, ch
   - **Quota and monitoring.** Limit IP exhaustion with a per-namespace `ResourceQuota` on `count/storageaccounts.platform.a5n.io` (e.g. `hard: {count/storageaccounts.platform.a5n.io: "5"}`), and monitor free IPs in the subnet, alerting well before it is full. Size the subnet for quota × namespaces plus headroom.
 
 After the first sandbox deploy, check that Defender for Cloud shows no new storage findings.
+
+## Key Vault baseline
+
+`KeyVault` (`docs/apis/keyvault.md`) creates a vault with Azure RBAC authorization and purge protection and, when private, a private endpoint (group `vault`). These controls are prerequisites, not shipped policy. Keldorn conditions to follow.
+
+- **Defender for Key Vault.** Enable the plan (E8, K5) at subscription level.
+- **Diagnostic settings.** Not part of the XR. Assign a DeployIfNotExists policy that sends the `AuditEvent` logs to Log Analytics (K1).
+- **Backstop policies.** Audit or deny: purge protection off, access policy (non-RBAC) authorization, and public network access on, "Key vaults should have firewall enabled".
+- **Private DNS.** Create the zone `privatelink.vaultcore.azure.net` and assign the Azure Policy "Configure Azure Key Vaults with private endpoints" / private DNS zone DeployIfNotExists at the management group. Until then private vaults are unreachable by name (D6).
+- **Data-plane roles.** The platform grants roles (for example Key Vault Secrets User) outside this API, because Contributor cannot assign roles (E1).
+- **Subnet join (E13).** The same subnet-join custom role applies to the vault private endpoint, with the same blast radius, quota (`count/keyvaults.platform.a5n.io`) and subnet policy notes as for storage.
+- **Purge protection.** Deleting a vault leaves it soft-deleted and its name reserved for up to 90 days; platform admins cannot purge it earlier.

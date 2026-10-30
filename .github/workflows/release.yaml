@@ -1,0 +1,147 @@
+name: release
+
+# One project per release. Tags: foundation/vX.Y.Z, services/vX.Y.Z, landingzone/vX.Y.Z.
+# Order is bottom-up (foundation and services before landingzone); see docs/RELEASING.md.
+on:
+  push:
+    tags:
+      - "foundation/v*"
+      - "services/v*"
+      - "landingzone/v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to (re)run, e.g. foundation/v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  # renovate: datasource=github-releases depName=crossplane/cli
+  CROSSPLANE_CLI_VERSION: v2.5.0
+  REGISTRY: ghcr.io/pettertech/crossplane-azure-starter-pack
+
+jobs:
+  preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: read
+    outputs:
+      project: ${{ steps.tag.outputs.project }}
+      version: ${{ steps.tag.outputs.version }}
+      tag: ${{ steps.tag.outputs.tag }}
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}
+          fetch-depth: 0
+
+      - name: Check tag and project
+        id: tag
+        run: |
+          if [[ ! $RELEASE_TAG =~ ^(foundation|services|landingzone)/(v[0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::tag '$RELEASE_TAG' must be <foundation|services|landingzone>/vX.Y.Z (no pre-release suffix)"
+            exit 1
+          fi
+          project=${BASH_REMATCH[1]} version=${BASH_REMATCH[2]}
+          [ -f "projects/$project/crossplane-project.yaml" ] || { echo "::error::no project $project at this tag"; exit 1; }
+          grep -q "repository: $REGISTRY/$project\$" "projects/$project/crossplane-project.yaml" \
+            || { echo "::error::projects/$project/crossplane-project.yaml repository is not $REGISTRY/$project"; exit 1; }
+          # Releases come from main only.
+          git merge-base --is-ancestor HEAD origin/main \
+            || { echo "::error::tag $RELEASE_TAG is not on main"; exit 1; }
+          echo "project=$project" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to ghcr.io (read)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+
+      - name: Refuse to overwrite a published version
+        env:
+          PROJECT: ${{ steps.tag.outputs.project }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          if docker buildx imagetools inspect "$REGISTRY/$PROJECT:$VERSION" >/dev/null 2>&1; then
+            echo "::error::$REGISTRY/$PROJECT:$VERSION already exists; published versions are immutable. Release a new patch version."
+            exit 1
+          fi
+
+      - name: Install crossplane CLI
+        run: |
+          curl -sfL "https://raw.githubusercontent.com/crossplane/cli/${CROSSPLANE_CLI_VERSION}/install.sh" | XP_VERSION="${CROSSPLANE_CLI_VERSION}" sh
+          sudo mv crossplane /usr/local/bin/
+          crossplane version --client
+
+      - name: Static validation
+        run: BUILD=0 scripts/validate.sh
+
+      - name: Release ranges and bottom-up order
+        env:
+          PROJECT: ${{ steps.tag.outputs.project }}
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: scripts/check-release-ranges.sh --registry "$PROJECT" "$VERSION"
+
+      - name: Project tests
+        env:
+          PROJECT: ${{ steps.tag.outputs.project }}
+        run: |
+          shopt -s nullglob
+          scripts=(projects/"$PROJECT"/tests/*/run.sh)
+          [ ${#scripts[@]} -gt 0 ] || { echo "no run.sh tests for $PROJECT" >&2; exit 1; }
+          for s in "${scripts[@]}"; do
+            echo "::group::$s"
+            "$s"
+            echo "::endgroup::"
+          done
+
+  publish:
+    needs: preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    env:
+      PROJECT: ${{ needs.preflight.outputs.project }}
+      VERSION: ${{ needs.preflight.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/tags/${{ needs.preflight.outputs.tag }}
+
+      - name: Install crossplane CLI
+        run: |
+          curl -sfL "https://raw.githubusercontent.com/crossplane/cli/${CROSSPLANE_CLI_VERSION}/install.sh" | XP_VERSION="${CROSSPLANE_CLI_VERSION}" sh
+          sudo mv crossplane /usr/local/bin/
+          crossplane version --client
+
+      - name: Log in to ghcr.io
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ACTOR: ${{ github.actor }}
+        run: echo "$GH_TOKEN" | docker login ghcr.io -u "$ACTOR" --password-stdin
+
+      - name: Build
+        working-directory: projects/${{ needs.preflight.outputs.project }}
+        run: crossplane project build --repository "$REGISTRY/$PROJECT"
+
+      - name: Push
+        working-directory: projects/${{ needs.preflight.outputs.project }}
+        run: crossplane project push --repository "$REGISTRY/$PROJECT" --tag "$VERSION"
+
+      - name: Verify published package
+        run: docker buildx imagetools inspect "$REGISTRY/$PROJECT:$VERSION"

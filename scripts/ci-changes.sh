@@ -7,8 +7,9 @@
 #   - .github/, scripts/ and setup/ feed every project (setup/functions.yaml is used by all render tests).
 #   - foundation/apis/_shared holds the resolver template that services compositions must match,
 #     and landingzone renders against foundation and services APIs.
-# Not built with `crossplane project build`: landingzone, which depends on foundation and services
-# packages that are not published yet (PR 18).
+# Not built with `crossplane project build` by default: landingzone, which needs the published
+# foundation and services packages. ci.yaml builds it when the repository variable
+# LANDINGZONE_BUILD is 'true' (set after they are released, see docs/RELEASING.md).
 set -euo pipefail
 
 cd "$(dirname "$0")/.."

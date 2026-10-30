@@ -61,9 +61,10 @@ jobs:
           sudo mv crossplane /usr/local/bin/
           crossplane version --client
       - name: Build project
-        # landingzone depends on foundation and services packages that are not published yet;
-        # it is built once they are released (PR 18). Its render tests below still run.
-        if: contains(fromJSON(needs.changes.outputs.build), matrix.project)
+        # landingzone resolves the published foundation and services Configurations, so it is
+        # built only when the repository variable LANDINGZONE_BUILD is 'true'. Set it once
+        # foundation and services are published (docs/RELEASING.md). Its render tests always run.
+        if: contains(fromJSON(needs.changes.outputs.build), matrix.project) || (matrix.project == 'landingzone' && vars.LANDINGZONE_BUILD == 'true')
         working-directory: projects/${{ matrix.project }}
         run: crossplane project build
       - name: Render and validate tests

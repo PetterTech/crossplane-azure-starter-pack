@@ -88,6 +88,7 @@ More: a minimal and an explicit example for every API are in `projects/*/example
 - [Tenant controls](docs/tenant-controls.md)
 - [Accepted exceptions](docs/accepted-exceptions.md)
 - [Migration from the javazone and nic branches](docs/MIGRATION.md)
+- [Releasing](docs/RELEASING.md)
 
 ## Validate
 

@@ -9,10 +9,12 @@
 #   --registry  only count versions that exist in ghcr.io (docker buildx imagetools inspect).
 #               Without it, git tags <dependency>/vX.Y.Z are the list of released versions.
 #
+# REGISTRY overrides the registry prefix (default ghcr.io/pettertech/crossplane-azure-starter-pack).
+# PROJECTS_DIR overrides the projects directory (default projects), for tests.
 # Overrides for tests: PUBLISHED_<DEP>="v0.1.0 v0.1.1" (DEP upper-case) replaces the version list.
 #
 # Checks:
-#   1. <version> is plain vX.Y.Z.
+#   1. <version> is plain vX.Y.Z (no leading zeros, no pre-release suffix).
 #   2. Every Configuration dependency range in projects/<project>/crossplane-project.yaml is
 #      "stable-shaped": >=A.B.C <next-breaking, where next-breaking is 0.(B+1).0 for 0.x and
 #      (A+1).0.0 otherwise.
@@ -24,9 +26,12 @@
 # Exit codes: 0 all checks pass, 1 a check failed, 2 usage error.
 set -euo pipefail
 
+PROJECTS_DIR=${PROJECTS_DIR:-projects}
+REGISTRY=${REGISTRY:-ghcr.io/pettertech/crossplane-azure-starter-pack}
+
 cd "$(dirname "$0")/.."
 
-usage() { sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//'; }
 
 registry=0
 args=()
@@ -41,13 +46,13 @@ done
 project=${args[0]} version=${args[1]}
 
 case "$project" in foundation|services|landingzone) ;; *) echo "unknown project: $project" >&2; exit 2 ;; esac
-manifest_of() { echo "projects/$1/crossplane-project.yaml"; }
+manifest_of() { echo "$PROJECTS_DIR/$1/crossplane-project.yaml"; }
 [ -f "$(manifest_of "$project")" ] || { echo "missing $(manifest_of "$project")" >&2; exit 2; }
 
 fail=0
 err() { echo "FAIL: $*" >&2; fail=1; }
 
-plain() { [[ $1 =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; }
+plain() { [[ $1 =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; }
 
 # a >= b for plain versions (without leading v)
 cmp() { # v1 op v2
@@ -76,12 +81,14 @@ satisfies() {
 # Prints "<dep-name> <range>" for each Configuration dependency of a project.
 config_deps() {
   awk '
+    function flush() { if (kind == "Configuration" && pkg != "" && v != "") { n=pkg; sub(/.*\//, "", n); print n, v } }
+    /^[[:space:]]*- type:/ { flush(); kind=""; pkg=""; v="" }
     /^[[:space:]]*kind:/ { kind=$2 }
     /^[[:space:]]*package:/ { pkg=$2 }
     /^[[:space:]]*version:/ {
       v=$0; sub(/^[[:space:]]*version:[[:space:]]*/, "", v); gsub(/"/, "", v)
-      if (kind == "Configuration") { n=pkg; sub(/.*\//, "", n); print n, v }
-    }' "$(manifest_of "$1")"
+    }
+    END { flush() }' "$(manifest_of "$1")"
 }
 
 released_versions() { # dep
@@ -92,7 +99,7 @@ released_versions() { # dep
   for v in $list; do
     plain "$v" || continue
     if [ "$registry" = 1 ] && [ -z "${!var+x}" ]; then
-      docker buildx imagetools inspect "ghcr.io/pettertech/crossplane-azure-starter-pack/$dep:$v" >/dev/null 2>&1 || continue
+      docker buildx imagetools inspect "$REGISTRY/$dep:$v" >/dev/null 2>&1 || continue
     fi
     echo "$v"
   done

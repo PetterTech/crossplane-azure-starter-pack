@@ -53,11 +53,16 @@ jobs:
     env:
       # renovate: datasource=github-releases depName=crossplane/cli
       CROSSPLANE_CLI_VERSION: v2.5.0
+      # SHA-256 of https://cli.crossplane.io/stable/<version>/bin/linux_amd64/crossplane; update with the version above.
+      # renovate: datasource=github-releases depName=crossplane/cli
+      CROSSPLANE_CLI_SHA256: 065dd6b40c9ea5fc71e49900d5c924cc0bec7f58375922ddbde6b402f292347e
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Install crossplane CLI
         run: |
-          curl -sfL "https://raw.githubusercontent.com/crossplane/cli/${CROSSPLANE_CLI_VERSION}/install.sh" | XP_VERSION="${CROSSPLANE_CLI_VERSION}" sh
+          curl -sfL "https://cli.crossplane.io/stable/${CROSSPLANE_CLI_VERSION}/bin/linux_amd64/crossplane" -o crossplane
+          echo "${CROSSPLANE_CLI_SHA256}  crossplane" | sha256sum -c -
+          chmod +x crossplane
           sudo mv crossplane /usr/local/bin/
           crossplane version --client
       - name: Build project

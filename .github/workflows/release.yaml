@@ -25,6 +25,9 @@ concurrency:
 env:
   # renovate: datasource=github-releases depName=crossplane/cli
   CROSSPLANE_CLI_VERSION: v2.5.0
+  # SHA-256 of https://cli.crossplane.io/stable/<version>/bin/linux_amd64/crossplane; update with the version above.
+  # renovate: datasource=github-releases depName=crossplane/cli
+  CROSSPLANE_CLI_SHA256: 065dd6b40c9ea5fc71e49900d5c924cc0bec7f58375922ddbde6b402f292347e
   REGISTRY: ghcr.io/pettertech/crossplane-azure-starter-pack
 
 jobs:
@@ -38,9 +41,16 @@ jobs:
       project: ${{ steps.tag.outputs.project }}
       version: ${{ steps.tag.outputs.version }}
       tag: ${{ steps.tag.outputs.tag }}
+      sha: ${{ steps.tag.outputs.sha }}
     env:
       RELEASE_TAG: ${{ github.event.inputs.tag || github.ref_name }}
     steps:
+      - name: Manual runs only from main
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::workflow_dispatch must run from refs/heads/main (got $GITHUB_REF)"
+          exit 1
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: refs/tags/${{ github.event.inputs.tag || github.ref_name }}
@@ -49,8 +59,8 @@ jobs:
       - name: Check tag and project
         id: tag
         run: |
-          if [[ ! $RELEASE_TAG =~ ^(foundation|services|landingzone)/(v[0-9]+\.[0-9]+\.[0-9]+)$ ]]; then
-            echo "::error::tag '$RELEASE_TAG' must be <foundation|services|landingzone>/vX.Y.Z (no pre-release suffix)"
+          if [[ ! $RELEASE_TAG =~ ^(foundation|services|landingzone)/(v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*))$ ]]; then
+            echo "::error::tag '$RELEASE_TAG' must be <foundation|services|landingzone>/vX.Y.Z (no pre-release suffix, no leading zeros)"
             exit 1
           fi
           project=${BASH_REMATCH[1]} version=${BASH_REMATCH[2]}
@@ -63,6 +73,7 @@ jobs:
           echo "project=$project" >> "$GITHUB_OUTPUT"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - name: Log in to ghcr.io (read)
         env:
@@ -75,14 +86,21 @@ jobs:
           PROJECT: ${{ steps.tag.outputs.project }}
           VERSION: ${{ steps.tag.outputs.version }}
         run: |
-          if docker buildx imagetools inspect "$REGISTRY/$PROJECT:$VERSION" >/dev/null 2>&1; then
+          if out=$(docker buildx imagetools inspect "$REGISTRY/$PROJECT:$VERSION" 2>&1); then
             echo "::error::$REGISTRY/$PROJECT:$VERSION already exists; published versions are immutable. Release a new patch version."
+            exit 1
+          fi
+          # Only a definite "not found" counts as unpublished; any other error fails closed.
+          if ! grep -qiE 'not found|manifest unknown|name unknown' <<<"$out"; then
+            echo "::error::cannot determine whether $REGISTRY/$PROJECT:$VERSION exists: $out"
             exit 1
           fi
 
       - name: Install crossplane CLI
         run: |
-          curl -sfL "https://raw.githubusercontent.com/crossplane/cli/${CROSSPLANE_CLI_VERSION}/install.sh" | XP_VERSION="${CROSSPLANE_CLI_VERSION}" sh
+          curl -sfL "https://cli.crossplane.io/stable/${CROSSPLANE_CLI_VERSION}/bin/linux_amd64/crossplane" -o crossplane
+          echo "${CROSSPLANE_CLI_SHA256}  crossplane" | sha256sum -c -
+          chmod +x crossplane
           sudo mv crossplane /usr/local/bin/
           crossplane version --client
 
@@ -110,6 +128,8 @@ jobs:
 
   publish:
     needs: preflight
+    # Required reviewers and branch/tag restrictions live on this environment (docs/RELEASING.md).
+    environment: release
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -118,14 +138,24 @@ jobs:
     env:
       PROJECT: ${{ needs.preflight.outputs.project }}
       VERSION: ${{ needs.preflight.outputs.version }}
+      TAG: ${{ needs.preflight.outputs.tag }}
+      SHA: ${{ needs.preflight.outputs.sha }}
     steps:
+      - name: Manual runs only from main
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::workflow_dispatch must run from refs/heads/main (got $GITHUB_REF)"
+          exit 1
+
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: refs/tags/${{ needs.preflight.outputs.tag }}
+          ref: ${{ needs.preflight.outputs.sha }}
 
       - name: Install crossplane CLI
         run: |
-          curl -sfL "https://raw.githubusercontent.com/crossplane/cli/${CROSSPLANE_CLI_VERSION}/install.sh" | XP_VERSION="${CROSSPLANE_CLI_VERSION}" sh
+          curl -sfL "https://cli.crossplane.io/stable/${CROSSPLANE_CLI_VERSION}/bin/linux_amd64/crossplane" -o crossplane
+          echo "${CROSSPLANE_CLI_SHA256}  crossplane" | sha256sum -c -
+          chmod +x crossplane
           sudo mv crossplane /usr/local/bin/
           crossplane version --client
 
@@ -138,6 +168,22 @@ jobs:
       - name: Build
         working-directory: projects/${{ needs.preflight.outputs.project }}
         run: crossplane project build --repository "$REGISTRY/$PROJECT"
+
+      - name: Re-verify tag and version immediately before push
+        run: |
+          remote=$(git ls-remote origin "refs/tags/$TAG" "refs/tags/$TAG^{}" | awk '{print $1}' | tail -n1)
+          if [ "$remote" != "$SHA" ]; then
+            echo "::error::tag $TAG now points to '${remote:-<missing>}', not the validated $SHA; aborting"
+            exit 1
+          fi
+          if out=$(docker buildx imagetools inspect "$REGISTRY/$PROJECT:$VERSION" 2>&1); then
+            echo "::error::$REGISTRY/$PROJECT:$VERSION already exists; published versions are immutable."
+            exit 1
+          fi
+          if ! grep -qiE 'not found|manifest unknown|name unknown' <<<"$out"; then
+            echo "::error::cannot determine whether $REGISTRY/$PROJECT:$VERSION exists: $out"
+            exit 1
+          fi
 
       - name: Push
         working-directory: projects/${{ needs.preflight.outputs.project }}

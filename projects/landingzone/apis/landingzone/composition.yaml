@@ -437,6 +437,7 @@ spec:
               {{- end -}}
               {{- $peSubnet := ternary (get $params "privateEndpointSubnetId" | default "") "" (ne $kind "ContainerApp") -}}
               {{- if and $peSubnet $liveSubnet (eq (lower $peSubnet) (lower $liveSubnet)) }}{{ fail "PrivateEndpointSubnetNotAllowed: privateEndpointSubnetId is the platform's shared private endpoint subnet. Use a subnet of your own virtual network. Nothing is created or pinned." }}{{ end -}}
+              {{- if and $peSubnet (not (hasPrefix (printf "/subscriptions/%s/" (lower $subID)) (lower $peSubnet))) }}{{ fail "PrivateEndpointSubnetWrongSubscription: privateEndpointSubnetId is not in this resource's own subscription. Use a subnet of a virtual network in the same subscription. Nothing is created or pinned." }}{{ end -}}
               {{- if $pinned -}}
                 {{- $subnet = get $pinEnv "subnetId" | default "" -}}
                 {{- if and (not $peSubnet) (ne $subnet $liveSubnet) }}{{ $drift = append $drift (ternary (printf "a subnetId was added to the EnvironmentConfig after this %s was created and is not used" $noun) "the subnetId in the EnvironmentConfig differs from the pinned subnet; the pinned subnet is kept" (eq $subnet "")) }}{{ end -}}

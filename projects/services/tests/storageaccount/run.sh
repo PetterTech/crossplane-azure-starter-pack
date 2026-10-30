@@ -109,6 +109,10 @@ check "privateEndpointSubnetId needs no platform subnet" "$WORK/xr-pesubnet.yaml
   abort st["environment"].inspect unless st["environment"]["subnetId"] == "'$LZ_SUBNET'"' "$WORK/env-nosubnet-pe.yaml"
 edit $T/xr.yaml "$WORK/xr-pe-platform.yaml" 'd["spec"]["parameters"]["privateEndpointSubnetId"] = "'$SUBNET'".upcase'
 must_fail "privateEndpointSubnetId equal to the platform subnet (any case): Fatal PrivateEndpointSubnetNotAllowed" PrivateEndpointSubnetNotAllowed "$WORK/xr-pe-platform.yaml"
+edit $T/xr.yaml "$WORK/xr-pe-foreign.yaml" 'd["spec"]["parameters"]["privateEndpointSubnetId"] = "'$LZ_SUBNET'".sub("eeeeeeee-1111-2222-3333-ffffffffffff", "99999999-1111-2222-3333-ffffffffffff")'
+must_fail "privateEndpointSubnetId in another subscription: Fatal PrivateEndpointSubnetWrongSubscription" PrivateEndpointSubnetWrongSubscription "$WORK/xr-pe-foreign.yaml"
+edit $T/xr.yaml "$WORK/xr-pe-upper.yaml" 'd["spec"]["parameters"]["privateEndpointSubnetId"] = "'$LZ_SUBNET'".sub("eeeeeeee", "EEEEEEEE")'
+check "privateEndpointSubnetId in the own subscription (any case) is accepted" "$WORK/xr-pe-upper.yaml" "" 'abort st["environment"].inspect unless st["environment"]["subnetId"].downcase == "'$LZ_SUBNET'".downcase'
 edit $T/xr-pinned.yaml "$WORK/xr-pe-pinned.yaml" 'd["spec"]["parameters"]["privateEndpointSubnetId"] = "'$LZ_SUBNET'"; d["status"]["environment"]["subnetId"] = "'$LZ_SUBNET'"'
 check "pinned with privateEndpointSubnetId: the endpoint is in that subnet and the platform subnet is no drift" "$WORK/xr-pe-pinned.yaml" observed-account.yaml '
   abort kinds.inspect unless kinds.include?("PrivateEndpoint")

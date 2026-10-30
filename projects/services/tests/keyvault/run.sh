@@ -112,6 +112,10 @@ check "privateEndpointSubnetId: pinned as the endpoint subnet, needs no platform
   abort cond["EnvironmentDrift"].inspect unless cond["EnvironmentDrift"]["status"] == "False"' "$WORK/env-nosubnet-pe.yaml"
 edit $T/xr.yaml "$WORK/xr-pe-platform.yaml" 'd["spec"]["parameters"]["privateEndpointSubnetId"] = "'$SUBNET'".upcase'
 must_fail "privateEndpointSubnetId equal to the platform subnet (any case): Fatal PrivateEndpointSubnetNotAllowed" PrivateEndpointSubnetNotAllowed "$WORK/xr-pe-platform.yaml"
+edit $T/xr.yaml "$WORK/xr-pe-foreign.yaml" 'd["spec"]["parameters"]["privateEndpointSubnetId"] = "'$LZ_SUBNET'".sub("eeeeeeee-1111-2222-3333-ffffffffffff", "99999999-1111-2222-3333-ffffffffffff")'
+must_fail "privateEndpointSubnetId in another subscription: Fatal PrivateEndpointSubnetWrongSubscription" PrivateEndpointSubnetWrongSubscription "$WORK/xr-pe-foreign.yaml"
+edit $T/xr.yaml "$WORK/xr-pe-upper.yaml" 'd["spec"]["parameters"]["privateEndpointSubnetId"] = "'$LZ_SUBNET'".sub("eeeeeeee", "EEEEEEEE")'
+check "privateEndpointSubnetId in the own subscription (any case) is accepted" "$WORK/xr-pe-upper.yaml" "" 'abort st["environment"].inspect unless st["environment"]["subnetId"].downcase == "'$LZ_SUBNET'".downcase'
 
 # --- reconcile 2: pins fed back in ---------------------------------------------------------
 check "reconcile 2: only the vault (the endpoint waits for its ID); hardened; pins win" $T/xr-pinned.yaml "" '

@@ -10,7 +10,7 @@ The landing zone follows the same model as Microsoft's Azure Landing Zones and s
 
 ```
 crossplane/            Providers, functions and runtime config to install into the cluster
-projects/foundation/   Subscription and network: the building blocks of a landing zone
+projects/foundation/   Space and network: the building blocks of a landing zone
 projects/services/     Single resources teams use inside their landing zone
 projects/stacks/       APIs that combine other APIs, like LandingZone
 ```
@@ -19,9 +19,9 @@ Each project is a Crossplane CLI project with its own `crossplane-project.yaml`,
 
 APIs:
 
-- foundation: `Subscription` (subscription, management group, identity), `VirtualNetwork` (VNet and hub connection)
-- services: `StorageAccount`, `KeyVault`, `ContainerApp`
-- stacks: `LandingZone` (a Subscription and a VirtualNetwork)
+- foundation: `Space` (subscription, management group, identity), `Network` (VNet and hub connection)
+- services: `Bucket` (storage account), `SecretStore` (Key Vault), `App` (container app)
+- stacks: `LandingZone` (a `Space` and a `Network`)
 
 Compositions only use standard functions (patch-and-transform, kro, go-templating, sequencer, auto-ready). There are no custom functions.
 

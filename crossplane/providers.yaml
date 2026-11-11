@@ -1,0 +1,81 @@
+# Azure providers. Keep all of them on the same version.
+#
+# family:          Subscription, ResourceGroup (Space)
+# management:      ManagementGroupSubscriptionAssociation (Space)
+# managedidentity: UserAssignedIdentity, FederatedIdentityCredential (Space)
+# authorization:   RoleAssignment (Space)
+# network:         VirtualNetwork, Subnet, VirtualHubConnection (Network)
+# storage:         Account (Bucket)
+# keyvault:        Vault (SecretStore)
+# containerapp:    Environment, ContainerApp (App)
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-family-azure
+spec:
+  package: xpkg.upbound.io/upbound/provider-family-azure:v2.8.0
+  runtimeConfigRef:
+    name: provider-azure
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-management
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-management:v2.8.0
+  runtimeConfigRef:
+    name: provider-azure
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-managedidentity
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-managedidentity:v2.8.0
+  runtimeConfigRef:
+    name: provider-azure
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-authorization
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-authorization:v2.8.0
+  runtimeConfigRef:
+    name: provider-azure
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-network
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-network:v2.8.0
+  runtimeConfigRef:
+    name: provider-azure
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-storage
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-storage:v2.8.0
+  runtimeConfigRef:
+    name: provider-azure
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-keyvault
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-keyvault:v2.8.0
+  runtimeConfigRef:
+    name: provider-azure
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Provider
+metadata:
+  name: provider-azure-containerapp
+spec:
+  package: xpkg.upbound.io/upbound/provider-azure-containerapp:v2.8.0
+  runtimeConfigRef:
+    name: provider-azure

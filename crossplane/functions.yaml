@@ -1,0 +1,45 @@
+# Composition functions. Preference order: patch-and-transform, kro, go-templating.
+# environment-configs reads the EnvironmentConfig, sequencer orders creation and
+# deletion, auto-ready always runs last.
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-environment-configs
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-environment-configs:v0.9.2
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-patch-and-transform
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-patch-and-transform:v0.11.2
+---
+# Pre-release. Read the release notes before bumping.
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-kro
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-kro:v0.3.0
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-go-templating
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-go-templating:v0.13.2
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-sequencer
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-sequencer:v0.6.1
+---
+apiVersion: pkg.crossplane.io/v1
+kind: Function
+metadata:
+  name: function-auto-ready
+spec:
+  package: xpkg.crossplane.io/crossplane-contrib/function-auto-ready:v0.7.3

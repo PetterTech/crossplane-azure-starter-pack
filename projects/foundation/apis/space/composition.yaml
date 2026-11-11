@@ -60,7 +60,7 @@ spec:
         kind: Resources
         environment:
           patches:
-            # Hash both names to avoid collisions in the central identity resource group.
+            # Hash namespace and name; identities share one central resource group.
             - type: CombineFromComposite
               combine:
                 variables:
@@ -69,7 +69,7 @@ spec:
                 strategy: string
                 string:
                   fmt: "%s/%s"
-              toFieldPath: spaceName
+              toFieldPath: identityName
               transforms:
                 - type: string
                   string:
@@ -87,8 +87,8 @@ spec:
                 toFieldPath: spec.forProvider.tags
           - name: space-provider
             patches:
-              - type: FromEnvironmentFieldPath
-                fromFieldPath: spaceName
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
                 toFieldPath: spec.providerConfigRef.name
         resources:
           - name: subscription
@@ -155,7 +155,7 @@ spec:
               - type: PatchSet
                 patchSetName: tags
               - type: FromEnvironmentFieldPath
-                fromFieldPath: spaceName
+                fromFieldPath: identityName
                 toFieldPath: spec.forProvider.name
                 policy:
                   fromFieldPath: Required
@@ -240,11 +240,9 @@ spec:
                 credentials:
                   source: OIDCTokenFile
             patches:
-              - type: FromEnvironmentFieldPath
-                fromFieldPath: spaceName
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
                 toFieldPath: metadata.name
-                policy:
-                  fromFieldPath: Required
               - type: FromEnvironmentFieldPath
                 fromFieldPath: tenantID
                 toFieldPath: spec.tenantID

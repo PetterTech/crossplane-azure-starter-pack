@@ -67,7 +67,7 @@ status:
 apiVersion: azure.m.upbound.io/v1beta1
 kind: ProviderConfig
 metadata:
-  name: space-ec01e22191635cd78095e692f33a2da1cb1ddc503ee1dd7b3a8f22270db55391
+  name: development
   namespace: team-a
   annotations:
     crossplane.io/composition-resource-name: provider-config

@@ -1,0 +1,19 @@
+# Platform settings the compositions read. Replace all placeholders before applying.
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: azure
+data:
+  # Tenant for the ProviderConfig each Space gets.
+  tenantID: "<azure-tenant-id>"
+  # The cluster's OIDC issuer, trusted by each Space's managed identity.
+  oidcIssuerURL: "<cluster-oidc-issuer-url>"
+  # Where each Space's managed identity is created.
+  identitySubscriptionID: "<identity-subscription-id>"
+  identityResourceGroupName: "<identity-resource-group>"
+  # Billing scope new subscriptions are created in (EA enrollment account or MCA invoice section).
+  billingScopeID: "/providers/Microsoft.Billing/billingAccounts/<billing-account>/enrollmentAccounts/<enrollment-account>"
+  # Management group new subscriptions are placed in.
+  landingZonesManagementGroupID: "/providers/Microsoft.Management/managementGroups/<landing-zones-mg>"
+  # Virtual WAN hub that each Network connects to.
+  virtualHubID: "/subscriptions/<hub-subscription-id>/resourceGroups/<hub-rg>/providers/Microsoft.Network/virtualHubs/<hub-name>"

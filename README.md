@@ -23,7 +23,7 @@ APIs:
 - services: `Bucket` (storage account), `SecretStore` (Key Vault), `App` (container app)
 - stacks: `LandingZone` (a `Space` and a `Network`)
 
-Compositions only use standard functions (patch-and-transform, kro, go-templating, sequencer, auto-ready). There are no custom functions.
+Compositions only use standard functions (environment-configs, patch-and-transform, kro, go-templating, sequencer, auto-ready). There are no custom functions.
 
 ## Getting started
 
@@ -41,9 +41,10 @@ You need a Kubernetes cluster and an Azure environment you can deploy to. That's
 
 2. Then [give Crossplane an identity and access in Azure](#identity-and-access-on-aks).
 3. Apply `crossplane/` (runtime config, providers, functions) and wait until everything is healthy.
-4. Create a `ClusterProviderConfig` named `default` that points to that identity.
-5. Apply the XRDs and compositions from `projects/foundation`, then `projects/services`, then `projects/stacks`.
-6. Try something from a project's `examples/`.
+4. Create a `ClusterProviderConfig` named `default` that points to that identity ([template](crossplane/templates/cluster-provider-config.yaml)).
+5. Create an `EnvironmentConfig` named `azure` with your tenant, identity subscription, billing scope, management group and hub ([template](crossplane/templates/environment-config.yaml)). The compositions read these values from it.
+6. Apply the XRDs and compositions from `projects/foundation`, then `projects/services`, then `projects/stacks`.
+7. Try something from a project's `examples/`.
 
 ## Identity and access on AKS
 

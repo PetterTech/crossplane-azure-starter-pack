@@ -1,0 +1,11 @@
+# Replace all placeholders before applying. Use the managed identity's client ID, not its principal ID.
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ClusterProviderConfig
+metadata:
+  name: default
+spec:
+  credentials:
+    source: OIDCTokenFile
+  clientID: "<managed-identity-client-id>"
+  tenantID: "<azure-tenant-id>"
+  subscriptionID: "<platform-subscription-id>"

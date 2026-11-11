@@ -7,7 +7,6 @@ data:
   tenantID: "00000000-0000-4000-8000-000000000005"
   oidcIssuerURL: "https://issuer.example.org/"
   defaultLocation: westeurope
-  identitySubscriptionId: "00000000-0000-4000-8000-000000000002"
   identityResourceGroupName: platform-identities
   billingScopeID: "/providers/Microsoft.Billing/billingAccounts/example/enrollmentAccounts/example"
   managementGroupIds:

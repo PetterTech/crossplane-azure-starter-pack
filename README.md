@@ -41,13 +41,13 @@ You need a Kubernetes cluster and an Azure environment you can deploy to. That's
 
 2. Then [give Crossplane an identity and access in Azure](#identity-and-access-on-aks).
 3. Apply `crossplane/` (runtime config, providers, functions) and wait until everything is healthy.
-4. Create a `ClusterProviderConfig` named `default` that points to that identity ([template](crossplane/templates/cluster-provider-config.yaml)).
+4. Create a `ClusterProviderConfig` named `default` that points to that identity
+   ([template](crossplane/templates/cluster-provider-config.yaml)). Its
+   `spec.subscriptionID` and `EnvironmentConfig.data.identityResourceGroupName`
+   select where Space identities are created.
 5. Create an `EnvironmentConfig` named `azure` with your tenant, default region,
-   identity subscription and resource group, billing scope, corp/online management
-   groups ([template](crossplane/templates/environment-config.yaml)).
-   Set the central `ClusterProviderConfig.spec.subscriptionID` to the same value
-   as `EnvironmentConfig.data.identitySubscriptionId`. The ProviderConfig selects
-   the subscription; EnvironmentConfig does not configure it automatically.
+   identity resource group, billing scope and corp/online management groups
+   ([template](crossplane/templates/environment-config.yaml)).
 6. Apply the XRDs and compositions from `projects/foundation`, then `projects/services`, then `projects/stacks`.
 7. Start creating XRs in your team namespaces.
 

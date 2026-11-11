@@ -10,8 +10,7 @@ data:
   oidcIssuerURL: "<cluster-oidc-issuer-url>"
   # Default Azure region for platform resources. In lowercase, one word, e.g., "swedencentral"
   defaultLocation: "<azure-region>"
-  # Central home for each Space's managed identity.
-  identitySubscriptionId: "<identity-subscription-id>"
+  # Central resource group for each Space's managed identity.
   identityResourceGroupName: "<identity-resource-group>"
   # Billing scope new subscriptions are created in (EA enrollment account or MCA invoice section).
   billingScopeID: "/providers/Microsoft.Billing/billingAccounts/<billing-account>/enrollmentAccounts/<enrollment-account>"

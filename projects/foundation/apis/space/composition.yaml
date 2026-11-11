@@ -33,7 +33,7 @@ spec:
           template: |
             {{- $env := index .context "apiextensions.crossplane.io/environment" }}
             {{- $xr := .observed.composite.resource }}
-            {{- range $key := list "tenantID" "oidcIssuerURL" "identitySubscriptionId" "identityResourceGroupName" "defaultLocation" "billingScopeID" }}
+            {{- range $key := list "tenantID" "oidcIssuerURL" "identityResourceGroupName" "defaultLocation" "billingScopeID" }}
             {{- if empty (index $env $key) }}{{ fail (printf "EnvironmentConfig azure requires %s" $key) }}{{ end }}
             {{- end }}
             {{- $groupName := index (dict "private" "corp" "public" "online") $xr.spec.exposure }}
@@ -274,6 +274,10 @@ spec:
                   kind: ProviderConfig
                 forProvider:
                   name: Microsoft.Network
+                  feature:
+                  # Disable automatic creation of Network Watcher, makes cleanup easier
+                  - name: DisableNetworkWatcherAutocreation
+                    registered: true
             patches:
               - type: PatchSet
                 patchSetName: space-provider

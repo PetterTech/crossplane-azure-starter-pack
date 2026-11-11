@@ -42,9 +42,14 @@ You need a Kubernetes cluster and an Azure environment you can deploy to. That's
 2. Then [give Crossplane an identity and access in Azure](#identity-and-access-on-aks).
 3. Apply `crossplane/` (runtime config, providers, functions) and wait until everything is healthy.
 4. Create a `ClusterProviderConfig` named `default` that points to that identity ([template](crossplane/templates/cluster-provider-config.yaml)).
-5. Create an `EnvironmentConfig` named `azure` with your tenant, identity subscription, billing scope, management group and hub ([template](crossplane/templates/environment-config.yaml)). The compositions read these values from it.
+5. Create an `EnvironmentConfig` named `azure` with your tenant, default region,
+   identity subscription and resource group, billing scope, corp/online management
+   groups and hub ([template](crossplane/templates/environment-config.yaml)).
+   Set the central `ClusterProviderConfig.spec.subscriptionID` to the same value
+   as `EnvironmentConfig.data.identitySubscriptionId`. The ProviderConfig selects
+   the subscription; EnvironmentConfig does not configure it automatically.
 6. Apply the XRDs and compositions from `projects/foundation`, then `projects/services`, then `projects/stacks`.
-7. Try something from a project's `examples/`.
+7. Start creating XRs in your team namespaces.
 
 ## Identity and access on AKS
 
@@ -74,7 +79,10 @@ The service account name `provider-azure` comes from `crossplane/deployment-runt
 
 Then give the identity access. For subscription vending it needs:
 
-- **Contributor** and **Role Based Access Control Administrator** on the management group where landing zones go
+- **Contributor** and **Role Based Access Control Administrator** on both the corp
+  and online management groups, with permission to assign **Owner**
+- **Managed Identity Contributor** on the central identity resource group
+- Permission to move new subscriptions into the target management groups
 - **Network Contributor** on the hub VNet, for peering
 - Permission to create subscriptions in your billing account. This can't be done with `az role assignment`, see [Create subscriptions programmatically](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/programmatically-create-subscription)
 
@@ -87,9 +95,69 @@ Not on AKS? Any cluster with a public OIDC issuer works the same way. See [Workl
 
 ## Before you use this for real
 
-- Replace `platform.example.org` and the IDs in the compositions with your own.
+- Replace `platform.example.org` with your own domain and fill in the platform templates.
 - Think through identity: which identity each team gets, and what it is allowed to do.
 - Lock down what teams can create. Teams should only get access to your platform APIs, not to provider resources or ProviderConfigs.
+
+## XRDs
+
+### Space
+
+A [Space](projects/foundation/apis/space/definition.yaml) creates a subscription,
+a managed identity in the central Azure resource group, and a ProviderConfig in
+the Space's namespace. The identity has **Owner only on that subscription**.
+
+Public inputs are `displayName`, `exposure` and optional `tags`:
+
+- `private` places the subscription in corp; `public` places it in online.
+  The composition maps exposure to `managementGroupIds.corp` or `.online`.
+- Managed identities use the platform's shared `defaultLocation`.
+- Exposure is immutable. It controls governance placement, not network access.
+- Up to 40 user tags are merged with up to 10 platform tags from EnvironmentConfig.
+  Platform-owned values override matching keys, ignoring case as Azure does.
+
+Try the [private](projects/foundation/examples/space-private.yaml) or
+[public](projects/foundation/examples/space-public.yaml) example in `team-a`.
+Wait for `Ready=True` before deploying services. Services select a Space by name
+in the same namespace and use its `status.providerConfigName`; callers do not
+choose credentials. Namespace is the trust boundary: only platform controllers
+should write ProviderConfigs, managed resources or XR status.
+
+The central identity bootstraps the subscription, management-group association,
+identity, federation and Owner assignment. Resource-provider registrations use the
+Space identity: Microsoft.Network, Microsoft.Storage, Microsoft.KeyVault,
+Microsoft.Compute and Microsoft.App.
+
+Delete with `kubectl delete space <name> -n <namespace> --cascade=foreground`.
+Deletion cancels the subscription and removes the managed identity and its access.
+Crossplane does not remove the management-group association or unregister
+providers; they remain for the subscription's lifetime. Sequenced Usages preserve
+credentials until dependent resources are removed. Delete service XRs before
+deleting their Space.
+
+#### Checking Space locally
+
+The [fixtures](projects/foundation/tests/space) use synthetic IDs, not a live tenant.
+With the Crossplane CLI and Docker, render each example from the repository root:
+
+```shell
+crossplane render projects/foundation/examples/space-private.yaml \
+  projects/foundation/apis/space/composition.yaml crossplane/functions.yaml \
+  --crossplane-version=v2.4.3 \
+  --xrd=projects/foundation/apis/space/definition.yaml \
+  --required-resources=projects/foundation/tests/space/environment.yaml
+```
+
+Repeat with `space-public.yaml`. An initial render only creates the subscription
+and identity. To render the completed composition, use
+`projects/foundation/tests/space/xr-ready.yaml` as the XR and add
+`--observed-resources=projects/foundation/tests/space/observed-ready.yaml`.
+It should contain all five provider registrations and namespaced v2 Usages.
+
+Validate examples with `crossplane resource validate
+projects/foundation/apis/space/definition.yaml projects/foundation/examples`.
+Validate rendered output against that XRD, the pinned provider CRDs and Crossplane's
+Usage CRD. Rendering does not test Azure permissions, role propagation or deletion.
 
 ## License
 

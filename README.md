@@ -27,7 +27,7 @@ Compositions only use standard functions (environment-configs, patch-and-transfo
 
 ## Getting started
 
-You need a Kubernetes cluster and an Azure environment you can deploy to. That's it.
+You need a Kubernetes cluster and an Azure environment you can deploy to. That's it. Then:
 
 1. Install Crossplane v2 ([docs](https://docs.crossplane.io/latest/get-started/install/)):
 
@@ -44,7 +44,7 @@ You need a Kubernetes cluster and an Azure environment you can deploy to. That's
 4. Create a `ClusterProviderConfig` named `default` that points to that identity ([template](crossplane/templates/cluster-provider-config.yaml)).
 5. Create an `EnvironmentConfig` named `azure` with your tenant, default region,
    identity subscription and resource group, billing scope, corp/online management
-   groups and hub ([template](crossplane/templates/environment-config.yaml)).
+   groups ([template](crossplane/templates/environment-config.yaml)).
    Set the central `ClusterProviderConfig.spec.subscriptionID` to the same value
    as `EnvironmentConfig.data.identitySubscriptionId`. The ProviderConfig selects
    the subscription; EnvironmentConfig does not configure it automatically.
@@ -75,21 +75,26 @@ az identity federated-credential create -g $RG --identity-name crossplane \
 az identity show -g $RG -n crossplane --query "{clientId:clientId, principalId:principalId, tenantId:tenantId}"
 ```
 
-The service account name `provider-azure` comes from `crossplane/deployment-runtime-config.yaml`. If you change one, change the other.
+The service account name `provider-azure` is set in
+`crossplane/deployment-runtime-config.yaml` and the Space composition.
+Keep both and the federated credential subject above in sync.
 
-Then give the identity access. For subscription vending it needs:
+Then give the central identity access for subscription vending:
 
-- **Contributor** and **Role Based Access Control Administrator** on both the corp
-  and online management groups, with permission to assign **Owner**
-- **Managed Identity Contributor** on the central identity resource group
-- Permission to move new subscriptions into the target management groups
-- **Network Contributor** on the hub VNet, for peering
+- **Managed Identity Contributor** on the central identity resource group.
+- **Management Group Contributor** on the target corp and online management
+  groups, or a suitable shared ancestor.
 - Permission to create subscriptions in your billing account. This can't be done with `az role assignment`, see [Create subscriptions programmatically](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/programmatically-create-subscription)
 
 ```shell
-az role assignment create --assignee-object-id <principalId> --assignee-principal-type ServicePrincipal \
-  --role Contributor --scope /providers/Microsoft.Management/managementGroups/<landing zones MG>
+az role assignment create \
+  --assignee-object-id <principalId> \
+  --assignee-principal-type ServicePrincipal \
+  --role "Management Group Contributor" \
+  --scope /providers/Microsoft.Management/managementGroups/<management-group-id>
 ```
+
+Repeat for the other target group, or use an appropriate shared ancestor.
 
 Not on AKS? Any cluster with a public OIDC issuer works the same way. See [Workload identity federation](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation).
 
@@ -120,8 +125,9 @@ Try the [private](projects/foundation/examples/space-private.yaml) or
 [public](projects/foundation/examples/space-public.yaml) example in `team-a`.
 Wait for `Ready=True` before deploying services. Services select a Space by name
 in the same namespace and use its `status.providerConfigName`; callers do not
-choose credentials. Namespace is the trust boundary: only platform controllers
-should write ProviderConfigs, managed resources or XR status.
+choose credentials. Only platform controllers should write ProviderConfigs,
+managed resources or XR status; the namespace does not isolate Azure identities
+from the shared provider service account.
 
 The central identity bootstraps the subscription, management-group association,
 identity, federation and Owner assignment. Resource-provider registrations use the

@@ -1,13 +1,9 @@
 # Azure providers. Keep all of them on the same version.
-#
-# family:          Subscription, ResourceGroup (Space)
-# management:      ManagementGroupSubscriptionAssociation (Space)
-# managedidentity: UserAssignedIdentity, FederatedIdentityCredential (Space)
-# authorization:   RoleAssignment (Space)
-# network:         VirtualNetwork, Subnet, VirtualHubConnection (Network)
-# storage:         Account (Bucket)
-# keyvault:        Vault (SecretStore)
-# containerapp:    Environment, ContainerApp (App)
+# Each provider ships all of its supported resource types, not just those used here.
+# Activating them all can increase cluster and provider resource usage. To limit this,
+# replace the default activate-all ManagedResourceActivationPolicy (MRAP) with one
+# that activates only the resource types your platform needs.
+# https://docs.crossplane.io/latest/managed-resources/managed-resource-activation-policies/
 apiVersion: pkg.crossplane.io/v1
 kind: Provider
 metadata:

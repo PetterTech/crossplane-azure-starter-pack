@@ -41,3 +41,10 @@ This repo is an accelerator for Crossplane v2 on Azure. Readers should be able t
 - `crossplane render` each example against its composition and functions.
 - `crossplane resource validate` the rendered output against the provider CRDs and the XRD.
 - Say what you actually ran. Do not claim something works against Azure unless it was tested there.
+
+## Commits and PRs
+
+- Use conventional commits for commit messages.
+- Use atomic PRs: each PR should do one thing and be self-contained.
+- Pull request descriptions should clearly explain what the PR does and why.
+- Link to relevant issues or discussions when applicable.

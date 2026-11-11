@@ -1,0 +1,94 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: spaces.platform.example.org
+spec:
+  scope: Namespaced
+  group: platform.example.org
+  names:
+    kind: Space
+    plural: spaces
+  defaultCompositionRef:
+    name: spaces.azure.platform.example.org
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      additionalPrinterColumns:
+        - name: DisplayName
+          type: string
+          jsonPath: .spec.displayName
+        - name: Exposure
+          type: string
+          jsonPath: .spec.exposure
+        - name: Subscription
+          type: string
+          jsonPath: .status.subscriptionID
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: >-
+            An Azure subscription with its own centrally hosted managed identity,
+            subscription-scoped Owner role and namespaced ProviderConfig.
+            Private Spaces go in corp; public Spaces go in online.
+            Deleting a Space cancels its Azure subscription and removes its identity
+            and access. Crossplane does not remove its management-group association
+            or unregister resource providers; these remain for the subscription's
+            lifetime. Delete with foreground cascading deletion to honor dependency ordering.
+          properties:
+            spec:
+              type: object
+              required:
+                - displayName
+                - exposure
+              properties:
+                displayName:
+                  type: string
+                  description: Display name of the Azure subscription.
+                  minLength: 3
+                  maxLength: 64
+                  pattern: '^\S+$'
+                exposure:
+                  type: string
+                  description: >-
+                    private selects corp; public selects online. Immutable because
+                    Crossplane must not remove the management-group association.
+                  enum:
+                    - private
+                    - public
+                  x-kubernetes-validations:
+                    - rule: self == oldSelf
+                      message: Exposure cannot change after creation; create a new Space.
+                tags:
+                  type: object
+                  description: >-
+                    User-facing Azure tags. Up to 40 entries, leaving room for
+                    platform tags. Platform-owned values take precedence.
+                  default: {}
+                  maxProperties: 40
+                  additionalProperties:
+                    type: string
+                    maxLength: 256
+                  x-kubernetes-validations:
+                    - rule: "self.all(k, size(k) > 0 && size(k) <= 512 && !k.matches('[<>%&\\\\?/]+'))"
+                      message: Tag keys must be 1-512 characters and cannot contain < > % & \ ? /.
+            status:
+              type: object
+              properties:
+                subscriptionID:
+                  type: string
+                  description: Azure subscription ID.
+                providerConfigName:
+                  type: string
+                  description: >-
+                    ProviderConfig in this namespace. Service APIs resolve the
+                    Space by name and use this value, never a caller-supplied ProviderConfig.
+                identity:
+                  type: object
+                  properties:
+                    resourceID:
+                      type: string
+                    clientID:
+                      type: string
+                    principalID:
+                      type: string

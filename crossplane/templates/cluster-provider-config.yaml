@@ -8,4 +8,4 @@ spec:
     source: OIDCTokenFile
   clientID: "<managed-identity-client-id>"
   tenantID: "<azure-tenant-id>"
-  subscriptionID: "<platform-subscription-id>"
+  subscriptionID: "<identity-subscription-id>"

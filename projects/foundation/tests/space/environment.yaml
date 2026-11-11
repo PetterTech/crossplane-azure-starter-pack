@@ -1,0 +1,18 @@
+# Synthetic render fixture, not an Azure configuration to deploy.
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: azure
+data:
+  tenantID: "00000000-0000-4000-8000-000000000005"
+  oidcIssuerURL: "https://issuer.example.org/"
+  defaultLocation: westeurope
+  identitySubscriptionId: "00000000-0000-4000-8000-000000000002"
+  identityResourceGroupName: platform-identities
+  billingScopeID: "/providers/Microsoft.Billing/billingAccounts/example/enrollmentAccounts/example"
+  managementGroupIds:
+    corp: "/providers/Microsoft.Management/managementGroups/corp"
+    online: "/providers/Microsoft.Management/managementGroups/online"
+  platformTags:
+    owner: platform
+    managed-by: crossplane

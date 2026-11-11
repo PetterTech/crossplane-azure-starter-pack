@@ -1,0 +1,137 @@
+apiVersion: azure.m.upbound.io/v1beta1
+kind: Subscription
+metadata:
+  name: space-test-subscription
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: subscription
+status:
+  atProvider:
+    subscriptionId: "00000000-0000-4000-8000-000000000001"
+  conditions:
+    - type: Ready
+      status: "True"
+---
+apiVersion: management.azure.m.upbound.io/v1beta1
+kind: ManagementGroupSubscriptionAssociation
+metadata:
+  name: space-test-association
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: management-group-association
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+---
+apiVersion: managedidentity.azure.m.upbound.io/v1beta1
+kind: UserAssignedIdentity
+metadata:
+  name: space-test-identity
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: identity
+status:
+  atProvider:
+    id: "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/platform-identities/providers/Microsoft.ManagedIdentity/userAssignedIdentities/space-test"
+    clientId: "00000000-0000-4000-8000-000000000003"
+    principalId: "00000000-0000-4000-8000-000000000004"
+  conditions:
+    - type: Ready
+      status: "True"
+---
+apiVersion: managedidentity.azure.m.upbound.io/v1beta1
+kind: FederatedIdentityCredential
+metadata:
+  name: space-test-federation
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: federated-credential
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+---
+apiVersion: authorization.azure.m.upbound.io/v1beta1
+kind: RoleAssignment
+metadata:
+  name: space-test-role
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: role-assignment
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+---
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ProviderConfig
+metadata:
+  name: space-ec01e22191635cd78095e692f33a2da1cb1ddc503ee1dd7b3a8f22270db55391
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: provider-config
+spec:
+  credentials:
+    source: OIDCTokenFile
+  clientID: "00000000-0000-4000-8000-000000000003"
+---
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceProviderRegistration
+metadata:
+  name: space-test-network
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: register-provider-network
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+---
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceProviderRegistration
+metadata:
+  name: space-test-storage
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: register-provider-storage
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+---
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceProviderRegistration
+metadata:
+  name: space-test-keyvault
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: register-provider-keyvault
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+---
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceProviderRegistration
+metadata:
+  name: space-test-compute
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: register-provider-compute
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+---
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceProviderRegistration
+metadata:
+  name: space-test-app
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: register-provider-app
+status:
+  conditions:
+    - type: Ready
+      status: "True"

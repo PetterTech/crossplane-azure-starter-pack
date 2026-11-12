@@ -76,6 +76,18 @@ spec:
     source: OIDCTokenFile
   clientID: "00000000-0000-4000-8000-000000000003"
 ---
+apiVersion: authorization.azure.m.upbound.io/v1beta1
+kind: RoleAssignment
+metadata:
+  name: space-test-ipam-role
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: ipam-pool-access
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+---
 apiVersion: azure.m.upbound.io/v1beta1
 kind: ResourceProviderRegistration
 metadata:

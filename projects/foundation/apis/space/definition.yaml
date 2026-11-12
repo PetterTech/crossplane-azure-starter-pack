@@ -29,7 +29,8 @@ spec:
           type: object
           description: >-
             An Azure subscription with its own centrally hosted managed identity,
-            subscription-scoped Owner role and namespaced ProviderConfig.
+            subscription-scoped Owner role, IPAM Pool User role on the platform
+            pool and namespaced ProviderConfig.
             Private Spaces go in corp; public Spaces go in online.
             Deleting a Space cancels its Azure subscription and removes its identity
             and access. Crossplane does not remove its management-group association

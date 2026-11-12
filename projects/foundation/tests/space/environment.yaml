@@ -9,6 +9,7 @@ data:
   defaultLocation: westeurope
   identityResourceGroupName: platform-identities
   billingScopeID: "/providers/Microsoft.Billing/billingAccounts/example/enrollmentAccounts/example"
+  ipamPoolID: "/subscriptions/00000000-0000-4000-8000-000000000003/resourceGroups/connectivity/providers/Microsoft.Network/networkManagers/platform/ipamPools/workloads"
   managementGroupIds:
     corp: "/providers/Microsoft.Management/managementGroups/corp"
     online: "/providers/Microsoft.Management/managementGroups/online"

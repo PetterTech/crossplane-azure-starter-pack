@@ -232,6 +232,29 @@ spec:
                     string:
                       type: Format
                       fmt: "/subscriptions/%s"
+          - name: ipam-pool-access
+            base:
+              apiVersion: authorization.azure.m.upbound.io/v1beta1
+              kind: RoleAssignment
+              spec:
+                providerConfigRef:
+                  kind: ClusterProviderConfig
+                  name: default
+                forProvider:
+                  roleDefinitionName: IPAM Pool User
+                  principalType: ServicePrincipal
+                  skipServicePrincipalAadCheck: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.identity.principalID
+                toFieldPath: spec.forProvider.principalId
+                policy:
+                  fromFieldPath: Required
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: ipamPoolID
+                toFieldPath: spec.forProvider.scope
+                policy:
+                  fromFieldPath: Required
           - name: provider-config
             base:
               apiVersion: azure.m.upbound.io/v1beta1
@@ -354,6 +377,9 @@ spec:
               - identity
               - federated-credential
               - role-assignment
+          - sequence:
+              - identity
+              - ipam-pool-access
     - step: auto-ready
       functionRef:
         name: function-auto-ready

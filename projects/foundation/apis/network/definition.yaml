@@ -1,0 +1,85 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: networks.platform.example.org
+spec:
+  scope: Namespaced
+  group: platform.example.org
+  names:
+    kind: Network
+    plural: networks
+  defaultCompositionRef:
+    name: networks.azure.platform.example.org
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      additionalPrinterColumns:
+        - name: Space
+          type: string
+          jsonPath: .spec.space
+        - name: Size
+          type: string
+          jsonPath: .spec.size
+        - name: AddressSpace
+          type: string
+          jsonPath: .status.addressSpace
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: >-
+            An IPAM-backed Azure network in a Space: resource group, VNet,
+            one full-range subnet and an attached NSG with no custom rules.
+            Azure default NSG rules still apply. Private Spaces connect to the
+            platform Virtual WAN hub; public Spaces do not.
+            Deleting a Network removes its Azure resources and access grant,
+            but never the platform pool or hub.
+            Delete with foreground cascading deletion before deleting its Space.
+          x-kubernetes-validations:
+            - rule: size(self.metadata.name) <= 63
+              message: Network name must be at most 63 characters.
+          properties:
+            spec:
+              type: object
+              required: [space]
+              properties:
+                space:
+                  type: string
+                  description: Name of a Space in this namespace. Immutable.
+                  minLength: 1
+                  maxLength: 63
+                  pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
+                  x-kubernetes-validations:
+                    - rule: self == oldSelf
+                      message: Space cannot change; create a new Network.
+                size:
+                  type: string
+                  description: IPAM allocation size. Immutable; small=/25, medium=/24, large=/23.
+                  enum: [small, medium, large]
+                  default: medium
+                  x-kubernetes-validations:
+                    - rule: self == oldSelf
+                      message: Size cannot change; create a new Network.
+                tags:
+                  type: object
+                  description: Up to 40 user tags. Platform-owned tags take precedence.
+                  default: {}
+                  maxProperties: 40
+                  additionalProperties:
+                    type: string
+                    maxLength: 256
+                  x-kubernetes-validations:
+                    - rule: "self.all(k, size(k) > 0 && size(k) <= 512 && !k.matches('[<>%&\\\\\\\\?/]+'))"
+                      message: Tag keys must be 1-512 characters and cannot contain < > % & \ ? /.
+            status:
+              type: object
+              properties:
+                resourceID:
+                  type: string
+                  description: VNet Azure resource ID.
+                addressSpace:
+                  type: array
+                  items:
+                    type: string
+                subnetID:
+                  type: string

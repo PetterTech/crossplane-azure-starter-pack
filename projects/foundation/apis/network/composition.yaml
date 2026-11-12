@@ -1,0 +1,239 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: networks.azure.platform.example.org
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: Network
+  mode: Pipeline
+  pipeline:
+    - step: environment
+      functionRef: {name: function-environment-configs}
+      input:
+        apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+        kind: Input
+        spec:
+          environmentConfigs:
+            - type: Reference
+              ref:
+                name: azure
+    - step: compose
+      functionRef: {name: function-patch-and-transform}
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        environment:
+          patches:
+            - type: FromCompositeFieldPath
+              fromFieldPath: metadata.uid
+              toFieldPath: networkName
+              policy: {fromFieldPath: Required}
+              transforms: [{type: string, string: {type: Format, fmt: "network-%s"}}]
+        patchSets:
+          - name: provider
+            patches: [{type: FromCompositeFieldPath, fromFieldPath: spec.space, toFieldPath: spec.providerConfigRef.name}]
+          - name: location
+            patches: [{type: FromEnvironmentFieldPath, fromFieldPath: defaultLocation, toFieldPath: spec.forProvider.location, policy: {fromFieldPath: Required}}]
+          - name: group
+            patches: [{type: FromEnvironmentFieldPath, fromFieldPath: networkName, toFieldPath: spec.forProvider.resourceGroupName, policy: {fromFieldPath: Required}}]
+        resources:
+          - name: space-usage
+            base:
+              apiVersion: protection.crossplane.io/v1beta1
+              kind: Usage
+              spec:
+                replayDeletion: true
+                of: {apiVersion: platform.example.org/v1alpha1, kind: Space, resourceRef: {}}
+                by: {apiVersion: platform.example.org/v1alpha1, kind: Network, resourceRef: {}}
+            patches:
+              - {type: FromCompositeFieldPath, fromFieldPath: spec.space, toFieldPath: spec.of.resourceRef.name}
+              - {type: FromCompositeFieldPath, fromFieldPath: metadata.name, toFieldPath: spec.by.resourceRef.name}
+            readinessChecks:
+              - type: None
+          - name: resource-group
+            base:
+              apiVersion: azure.m.upbound.io/v1beta1
+              kind: ResourceGroup
+              spec:
+                providerConfigRef: {kind: ProviderConfig}
+            patches:
+              - {type: PatchSet, patchSetName: provider}
+              - {type: PatchSet, patchSetName: location}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: networkName, toFieldPath: "metadata.annotations[crossplane.io/external-name]", policy: {fromFieldPath: Required}}
+          - name: vnet
+            base:
+              apiVersion: network.azure.m.upbound.io/v1beta1
+              kind: VirtualNetwork
+              metadata: {annotations: {crossplane.io/external-name: network}}
+              spec:
+                managementPolicies: [Create, Observe, Update, Delete]
+                providerConfigRef: {kind: ProviderConfig}
+            patches:
+              - {type: PatchSet, patchSetName: provider}
+              - {type: PatchSet, patchSetName: location}
+              - {type: PatchSet, patchSetName: group}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: ipamPoolID, toFieldPath: "spec.forProvider.ipAddressPool[0].id", policy: {fromFieldPath: Required}}
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.size
+                toFieldPath: "spec.forProvider.ipAddressPool[0].numberOfIpAddresses"
+                transforms:
+                  - type: map
+                    map: {small: "128", medium: "256", large: "512"}
+              - {type: ToEnvironmentFieldPath, fromFieldPath: status.atProvider.addressSpace, toFieldPath: networkAddressSpace}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.atProvider.id, toFieldPath: status.resourceID}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.atProvider.addressSpace, toFieldPath: status.addressSpace}
+            readinessChecks:
+              - {type: MatchCondition, matchCondition: {type: Ready, status: "True"}}
+              - {type: NonEmpty, fieldPath: status.atProvider.id}
+              - {type: NonEmpty, fieldPath: "status.atProvider.addressSpace[0]"}
+          - name: subnet
+            base:
+              apiVersion: network.azure.m.upbound.io/v1beta1
+              kind: Subnet
+              metadata: {annotations: {crossplane.io/external-name: default}}
+              spec:
+                providerConfigRef: {kind: ProviderConfig}
+                forProvider: {virtualNetworkName: network}
+            patches:
+              - {type: PatchSet, patchSetName: provider}
+              - {type: PatchSet, patchSetName: group}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: networkAddressSpace, toFieldPath: spec.forProvider.addressPrefixes, policy: {fromFieldPath: Required}}
+              - {type: ToEnvironmentFieldPath, fromFieldPath: status.atProvider.id, toFieldPath: subnetID}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.atProvider.id, toFieldPath: status.subnetID}
+            readinessChecks:
+              - {type: MatchCondition, matchCondition: {type: Ready, status: "True"}}
+              - {type: NonEmpty, fieldPath: status.atProvider.id}
+          - name: nsg
+            base:
+              apiVersion: network.azure.m.upbound.io/v1beta1
+              kind: SecurityGroup
+              metadata: {annotations: {crossplane.io/external-name: network}}
+              spec:
+                providerConfigRef: {kind: ProviderConfig}
+                forProvider: {securityRule: []}
+            patches:
+              - {type: PatchSet, patchSetName: provider}
+              - {type: PatchSet, patchSetName: location}
+              - {type: PatchSet, patchSetName: group}
+              - {type: ToEnvironmentFieldPath, fromFieldPath: status.atProvider.id, toFieldPath: nsgID}
+            readinessChecks:
+              - {type: MatchCondition, matchCondition: {type: Ready, status: "True"}}
+              - {type: NonEmpty, fieldPath: status.atProvider.id}
+          - name: association
+            base:
+              apiVersion: network.azure.m.upbound.io/v1beta1
+              kind: SubnetNetworkSecurityGroupAssociation
+              spec:
+                providerConfigRef: {kind: ProviderConfig}
+            patches:
+              - {type: PatchSet, patchSetName: provider}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: subnetID, toFieldPath: spec.forProvider.subnetId, policy: {fromFieldPath: Required}}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: nsgID, toFieldPath: spec.forProvider.networkSecurityGroupId, policy: {fromFieldPath: Required}}
+    - step: private-connection
+      functionRef: {name: function-go-templating}
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{- $xr := .observed.composite.resource }}
+            {{- $env := index .context "apiextensions.crossplane.io/environment" }}
+            {{- $extra := .requiredResources | default dict }}
+            {{- range $key := list "defaultLocation" "ipamPoolID" }}
+            {{- if empty (index $env $key) }}{{ fail (printf "EnvironmentConfig azure requires %s" $key) }}{{ end }}
+            {{- end }}
+            ---
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              space:
+                apiVersion: platform.example.org/v1alpha1
+                kind: Space
+                namespace: {{ $xr.metadata.namespace | quote }}
+                matchName: {{ $xr.spec.space | quote }}
+            {{- if hasKey $extra "space" }}
+            {{- $spaces := dig "space" "items" (list) $extra }}
+            {{- if ne (len $spaces) 1 }}{{ fail (printf "Space %s/%s not found" $xr.metadata.namespace $xr.spec.space) }}{{ end }}
+            {{- $space := (index $spaces 0).resource }}
+            {{- if ne $space.metadata.namespace $xr.metadata.namespace }}{{ fail "Space must be in the Network namespace" }}{{ end }}
+            {{- range $name := list "resource-group" "vnet" "subnet" "nsg" "association" }}
+            {{- if and (getComposedResource $ $name) (not (hasKey ($.desired.resources | default dict) $name)) }}{{ fail (printf "Cannot render existing %s: required input is missing" $name) }}{{ end }}
+            {{- end }}
+            {{- if and (getComposedResource . "subnet") (empty (dig "status" "atProvider" "addressSpace" (list) (getComposedResource . "vnet" | default dict))) }}{{ fail "Existing subnet requires the observed VNet address space" }}{{ end }}
+            {{- if getComposedResource . "association" }}
+            {{- range $name := list "subnet" "nsg" }}
+            {{- if empty (dig "status" "atProvider" "id" "" (getComposedResource $ $name | default dict)) }}{{ fail (printf "Existing association requires the observed %s ID" $name) }}{{ end }}
+            {{- end }}
+            {{- end }}
+            {{- $platformKeys := dict }}
+            {{- range $key, $_ := $env.platformTags }}{{ $_ := set $platformKeys (lower $key) true }}{{ end }}
+            {{- $tags := dict }}
+            {{- range $key, $value := dig "spec" "tags" (dict) $xr }}
+            {{- if not (hasKey $platformKeys (lower $key)) }}{{ $_ := set $tags $key $value }}{{ end }}
+            {{- end }}
+            {{- $_ := mergeOverwrite $tags $env.platformTags }}
+            {{- range $name := list "resource-group" "vnet" "nsg" }}
+            {{- $entry := get ($.desired.resources | default dict) $name }}
+            {{- if $entry }}
+            {{- $resource := deepCopy $entry.resource }}
+            {{- $_ := set $resource.spec.forProvider "tags" $tags }}
+            {{- $_ := set $resource.metadata.annotations "gotemplating.fn.crossplane.io/composition-resource-name" $name }}
+            {{- $_ := set $resource.metadata.annotations "gotemplating.fn.crossplane.io/ready" (ternary "True" "False" (eq (get $entry "ready") "READY_TRUE")) }}
+            ---
+            {{ $resource | toYaml }}
+            {{- end }}
+            {{- end }}
+            {{- if eq $space.spec.exposure "private" }}
+            {{- range $key := list "platformPrincipalID" "virtualHubID" }}
+            {{- if empty (index $env $key) }}{{ fail (printf "EnvironmentConfig azure requires %s" $key) }}{{ end }}
+            {{- end }}
+            {{- $vnetID := dig "status" "atProvider" "id" "" (getComposedResource . "vnet" | default dict) }}
+            {{- if and (empty $vnetID) (or (getComposedResource . "platformAccess") (getComposedResource . "hubConnection")) }}{{ fail "Existing connection requires the observed VNet ID" }}{{ end }}
+            {{- if $vnetID }}
+            ---
+            apiVersion: authorization.azure.m.upbound.io/v1beta1
+            kind: RoleAssignment
+            metadata:
+              annotations:
+                {{ setResourceNameAnnotation "platformAccess" }}
+                gotemplating.fn.crossplane.io/ready: {{ (getResourceCondition "Ready" (getComposedResource . "platformAccess" | default dict)).Status | quote }}
+            spec:
+              providerConfigRef: {kind: ProviderConfig, name: {{ $xr.spec.space | quote }}}
+              forProvider:
+                principalId: {{ $env.platformPrincipalID | quote }}
+                principalType: ServicePrincipal
+                roleDefinitionName: Network Contributor
+                scope: {{ $vnetID | quote }}
+                skipServicePrincipalAadCheck: true
+            ---
+            apiVersion: network.azure.m.upbound.io/v1beta1
+            kind: VirtualHubConnection
+            metadata:
+              annotations:
+                {{ setResourceNameAnnotation "hubConnection" }}
+            spec:
+              providerConfigRef: {kind: ClusterProviderConfig, name: default}
+              forProvider:
+                virtualHubId: {{ $env.virtualHubID | quote }}
+                remoteVirtualNetworkId: {{ $vnetID | quote }}
+            {{- end }}
+            {{- end }}
+            {{- end }}
+    - step: sequence
+      functionRef: {name: function-sequencer}
+      input:
+        apiVersion: sequencer.fn.crossplane.io/v1beta1
+        kind: Input
+        enableDeletionSequencing: true
+        usageVersion: v2
+        replayDeletion: true
+        resetCompositeReadiness: true
+        rules:
+          - sequence: [space-usage, resource-group]
+          - sequence: [resource-group, vnet, platformAccess, hubConnection]
+          - sequence: [vnet, subnet, association]
+          - sequence: [resource-group, nsg, association]
+    - step: auto-ready
+      functionRef: {name: function-auto-ready}

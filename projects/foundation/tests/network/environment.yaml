@@ -1,0 +1,31 @@
+# Synthetic render fixtures, not an Azure configuration to deploy.
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: azure
+data:
+  defaultLocation: westeurope
+  platformPrincipalID: "00000000-0000-4000-8000-000000000001"
+  ipamPoolID: "/subscriptions/00000000-0000-4000-8000-000000000003/resourceGroups/connectivity/providers/Microsoft.Network/networkManagers/platform/ipamPools/workloads"
+  virtualHubID: "/subscriptions/00000000-0000-4000-8000-000000000003/resourceGroups/connectivity/providers/Microsoft.Network/virtualHubs/hub"
+  platformTags:
+    owner: platform
+    managed-by: crossplane
+---
+apiVersion: platform.example.org/v1alpha1
+kind: Space
+metadata:
+  name: development
+  namespace: team-a
+spec:
+  displayName: Development
+  exposure: private
+---
+apiVersion: platform.example.org/v1alpha1
+kind: Space
+metadata:
+  name: website
+  namespace: team-a
+spec:
+  displayName: PublicSite
+  exposure: public

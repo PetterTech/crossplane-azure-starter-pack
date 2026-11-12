@@ -49,6 +49,8 @@ This repo is an accelerator for Crossplane v2 on Azure. Readers should be able t
 - Each Space gets a dedicated managed identity in the central Azure identity resource group, with Owner scoped only to its subscription.
 - Bootstrap creates the subscription, identity, federation, role assignment and namespaced ProviderConfig. Subsequent operations use the Space identity wherever Azure permissions allow.
 - Keep each Space's ProviderConfig in the Space/team namespace. Services use the selected Space's ProviderConfig, never the platform identity.
+- Hub connections are a platform operation and use the ClusterProviderConfig.
+  Space identities never get access to the hub.
 
 ## Checking your work
 

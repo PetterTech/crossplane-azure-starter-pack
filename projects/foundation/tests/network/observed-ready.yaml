@@ -1,0 +1,76 @@
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: private-network-space-usage
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: space-usage}
+---
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceGroup
+metadata:
+  name: private-network-group
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: resource-group}
+status:
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: VirtualNetwork
+metadata:
+  name: private-network
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: vnet}
+status:
+  atProvider:
+    id: "/subscriptions/00000000-0000-4000-8000-000000000008/resourceGroups/network-8de0184b-53d7-51c5-abf0-0dcc2e8afe26/providers/Microsoft.Network/virtualNetworks/network"
+    addressSpace: [10.20.0.0/24]
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: Subnet
+metadata:
+  name: private-network
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: subnet}
+status:
+  atProvider:
+    id: "/subscriptions/00000000-0000-4000-8000-000000000008/resourceGroups/network-8de0184b-53d7-51c5-abf0-0dcc2e8afe26/providers/Microsoft.Network/virtualNetworks/network/subnets/default"
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: SecurityGroup
+metadata:
+  name: private-network-nsg
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: nsg}
+status:
+  atProvider:
+    id: "/subscriptions/00000000-0000-4000-8000-000000000008/resourceGroups/network-8de0184b-53d7-51c5-abf0-0dcc2e8afe26/providers/Microsoft.Network/networkSecurityGroups/network"
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: SubnetNetworkSecurityGroupAssociation
+metadata:
+  name: private-network-association
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: association}
+status:
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: authorization.azure.m.upbound.io/v1beta1
+kind: RoleAssignment
+metadata:
+  name: private-network-platform-access
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: platformAccess}
+status:
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: VirtualHubConnection
+metadata:
+  name: private-network-hub
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: hubConnection}
+status:
+  conditions: [{type: Ready, status: "True"}]

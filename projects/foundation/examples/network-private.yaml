@@ -1,0 +1,10 @@
+apiVersion: platform.example.org/v1alpha1
+kind: Network
+metadata:
+  name: private-network
+  namespace: team-a
+spec:
+  space: development
+  size: medium
+  tags:
+    owner: team-a

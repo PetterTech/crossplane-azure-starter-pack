@@ -19,5 +19,9 @@ data:
     online: "/providers/Microsoft.Management/managementGroups/<online-mg>"
   # Up to 10 platform-owned tags, overriding matching user-facing tags.
   platformTags: {}
-  # Virtual WAN hub that each Network connects to.
+  # Principal (object) ID of the managed identity in ClusterProviderConfig default.
+  platformPrincipalID: "<platform-identity-principal-id>"
+  # Network address space is allocated from this platform-owned IPAM pool.
+  ipamPoolID: "/subscriptions/<pool-subscription-id>/resourceGroups/<pool-rg>/providers/Microsoft.Network/networkManagers/<manager-name>/ipamPools/<pool-name>"
+  # Only Networks selecting private Spaces connect to this Virtual WAN hub.
   virtualHubID: "/subscriptions/<hub-subscription-id>/resourceGroups/<hub-rg>/providers/Microsoft.Network/virtualHubs/<hub-name>"

@@ -46,7 +46,8 @@ You need a Kubernetes cluster and an Azure environment you can deploy to. That's
    `spec.subscriptionID` and `EnvironmentConfig.data.identityResourceGroupName`
    select where Space identities are created.
 5. Create an `EnvironmentConfig` named `azure` with your tenant, default region,
-   identity resource group, billing scope and corp/online management groups
+   identity resource group, billing scope, management groups, pool, hub and
+   platform identity principal ID
    ([template](crossplane/templates/environment-config.yaml)).
 6. Apply the XRDs and compositions from `projects/foundation`, then `projects/services`, then `projects/stacks`.
 7. Start creating XRs in your team namespaces.
@@ -84,6 +85,9 @@ Then give the central identity access for subscription vending:
 - **Managed Identity Contributor** on the central identity resource group.
 - **Management Group Contributor** on the target corp and online management
   groups, or a suitable shared ancestor.
+- **User Access Administrator** on the IPAM pool, to grant Space identities
+  IPAM Pool User.
+- **Network Contributor** on the hub resource group, for hub connections.
 - Permission to create subscriptions in your billing account. This can't be done with `az role assignment`, see [Create subscriptions programmatically](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/programmatically-create-subscription)
 
 ```shell
@@ -110,7 +114,8 @@ Not on AKS? Any cluster with a public OIDC issuer works the same way. See [Workl
 
 A [Space](projects/foundation/apis/space/definition.yaml) creates a subscription,
 a managed identity in the central Azure resource group, and a ProviderConfig in
-the Space's namespace. The identity has **Owner only on that subscription**.
+the Space's namespace. The identity has **Owner** on that subscription and
+**IPAM Pool User** on the platform pool.
 
 Public inputs are `displayName`, `exposure` and optional `tags`:
 
@@ -130,9 +135,9 @@ managed resources or XR status; the namespace does not isolate Azure identities
 from the shared provider service account.
 
 The central identity bootstraps the subscription, management-group association,
-identity, federation and Owner assignment. Resource-provider registrations use the
-Space identity: Microsoft.Network, Microsoft.Storage, Microsoft.KeyVault,
-Microsoft.Compute and Microsoft.App.
+identity, federation, Owner assignment and pool access. Resource-provider
+registrations use the Space identity: Microsoft.Network, Microsoft.Storage,
+Microsoft.KeyVault, Microsoft.Compute and Microsoft.App.
 
 Delete with `kubectl delete space <name> -n <namespace> --cascade=foreground`.
 Deletion cancels the subscription and removes the managed identity and its access.
@@ -160,10 +165,71 @@ and identity. To render the completed composition, use
 `--observed-resources=projects/foundation/tests/space/observed-ready.yaml`.
 It should contain all five provider registrations and namespaced v2 Usages.
 
-Validate examples with `crossplane resource validate
-projects/foundation/apis/space/definition.yaml projects/foundation/examples`.
+Validate the Space examples with `crossplane resource validate
+projects/foundation/apis/space/definition.yaml
+projects/foundation/examples/space-private.yaml,projects/foundation/examples/space-public.yaml`.
 Validate rendered output against that XRD, the pinned provider CRDs and Crossplane's
 Usage CRD. Rendering does not test Azure permissions, role propagation or deletion.
+
+### Network
+
+A [Network](projects/foundation/apis/network/definition.yaml) selects a
+Space by name in the same namespace. It owns a resource group, an IPAM-backed
+VNet, one subnet using the entire allocation, and an attached NSG with **no custom
+rules**. Azure default NSG rules still apply; this is not spoke isolation.
+
+Inputs are `space`, `size` (small `/25`, medium `/24`, large `/23`; default medium)
+and optional `tags`. Space and size are immutable. Platform tags override user
+tags, including case-insensitive matches. There are no credential, subnet or hub
+switches. App infrastructure subnets are out of scope.
+
+Networks in private Spaces connect to the platform Virtual WAN hub. Networks in
+public Spaces do not; this does not automatically expose them to the Internet.
+See the [private](projects/foundation/examples/network-private.yaml) and
+[public](projects/foundation/examples/network-public.yaml) examples.
+
+#### Network identity and setup
+
+The Space identity creates all resources in its subscription, including the
+VNet and, for private Spaces, a **Network Contributor** assignment for the
+platform identity scoped to that VNet. The platform identity uses
+ClusterProviderConfig `default` to create the hub connection. Space identities
+have no hub access.
+
+Set `ipamPoolID`, `virtualHubID` and `platformPrincipalID` in the
+[environment template](crossplane/templates/environment-config.yaml). The
+principal ID must match ClusterProviderConfig `default`. Pool, hub and region
+are platform settings, not pinned per Network: changing them affects existing
+Networks and requires a planned migration.
+
+The shared hub does not isolate team networks. Configure hub routing before
+production, and use quotas and pool monitoring to manage IP address exhaustion.
+
+Delete with `kubectl delete network <name> -n <namespace> --cascade=foreground`.
+Sequenced v2 Usages preserve the VNet grant until its hub connection is removed.
+A Usage protects the selected Space until
+Network cleanup completes. Neither the central pool nor hub is owned or deleted.
+
+#### Checking Network locally
+
+The [fixtures](projects/foundation/tests/network) contain synthetic IDs.
+Render each example from the repository root:
+
+```shell
+crossplane render projects/foundation/examples/network-private.yaml \
+  projects/foundation/apis/network/composition.yaml crossplane/functions.yaml \
+  --crossplane-version=v2.4.3 \
+  --xrd=projects/foundation/apis/network/definition.yaml \
+  --required-resources=projects/foundation/tests/network/environment.yaml \
+  --observed-resources=projects/foundation/tests/network/observed-ready.yaml
+```
+
+Repeat with `network-public.yaml` and
+`projects/foundation/tests/network/observed-public.yaml`.
+The private graph includes the hub connection and dependency Usages. Validate examples
+against the Network XRD, and full render output against that XRD, the pinned
+provider CRDs and Crossplane's v2 Usage CRD.
+Rendering does not verify Azure permissions, RBAC propagation, routing or deletion.
 
 ## License
 

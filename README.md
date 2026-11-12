@@ -108,6 +108,23 @@ Not on AKS? Any cluster with a public OIDC issuer works the same way. See [Workl
 - Think through identity: which identity each team gets, and what it is allowed to do.
 - Lock down what teams can create. Teams should only get access to your platform APIs, not to provider resources or ProviderConfigs.
 
+## Local checks
+
+With PowerShell 7, the Crossplane CLI and Docker running, run from the repository root:
+
+```shell
+pwsh -NoProfile -File ./tests/test.ps1
+```
+
+The [test runner](tests/test.ps1) runs with PowerShell 7 on Windows, Linux and macOS.
+It renders all Space and Network examples plus the ready-state Space fixture, then
+validates examples and output against the XRDs, pinned providers and Crossplane schemas.
+Missing schemas and failed checks return a nonzero exit code.
+Temporary output is removed; downloaded provider schemas and Docker images are cached.
+Each run fetches the namespaced Usage CRD from the pinned Crossplane release on GitHub;
+the first run also needs registry access. No cluster or Azure credentials are needed.
+These checks do not test live Azure behavior.
+
 ## XRDs
 
 ### Space

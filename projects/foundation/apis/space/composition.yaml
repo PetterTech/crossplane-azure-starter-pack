@@ -1,0 +1,387 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: spaces.azure.platform.example.org
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: Space
+  mode: Pipeline
+  pipeline:
+    - step: environment
+      functionRef:
+        name: function-environment-configs
+      input:
+        apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+        kind: Input
+        spec:
+          environmentConfigs:
+            - type: Reference
+              ref:
+                name: azure
+    # P&T cannot select a field from an environment map using an XR value.
+    - step: space-settings
+      functionRef:
+        name: function-go-templating
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        options:
+          - missingkey=error
+        inline:
+          template: |
+            {{- $env := index .context "apiextensions.crossplane.io/environment" }}
+            {{- $xr := .observed.composite.resource }}
+            {{- range $key := list "tenantID" "oidcIssuerURL" "identityResourceGroupName" "defaultLocation" "billingScopeID" }}
+            {{- if empty (index $env $key) }}{{ fail (printf "EnvironmentConfig azure requires %s" $key) }}{{ end }}
+            {{- end }}
+            {{- $groupName := index (dict "private" "corp" "public" "online") $xr.spec.exposure }}
+            {{- $group := index $env.managementGroupIds $groupName }}
+            {{- if empty $group }}{{ fail (printf "No management group configured for exposure %s" $xr.spec.exposure) }}{{ end }}
+            {{- $_ := set $env "managementGroupID" $group }}
+            {{- $platformKeys := dict }}
+            {{- range $key, $_ := $env.platformTags }}{{ $_ := set $platformKeys (lower $key) true }}{{ end }}
+            {{- $tags := dict }}
+            {{- range $key, $value := dig "spec" "tags" (dict) $xr }}
+            {{- if not (hasKey $platformKeys (lower $key)) }}{{ $_ := set $tags $key $value }}{{ end }}
+            {{- end }}
+            {{- $_ := set $env "spaceTags" (mergeOverwrite $tags $env.platformTags) }}
+            ---
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: Context
+            data:
+              apiextensions.crossplane.io/environment: {{ $env | toJson }}
+    - step: compose
+      functionRef:
+        name: function-patch-and-transform
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        environment:
+          patches:
+            # Hash namespace and name; identities share one central resource group.
+            - type: CombineFromComposite
+              combine:
+                variables:
+                  - fromFieldPath: metadata.namespace
+                  - fromFieldPath: metadata.name
+                strategy: string
+                string:
+                  fmt: "%s/%s"
+              toFieldPath: identityName
+              transforms:
+                - type: string
+                  string:
+                    type: Convert
+                    convert: ToSha256
+                - type: string
+                  string:
+                    type: Format
+                    fmt: "space-%s"
+        patchSets:
+          - name: tags
+            patches:
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: spaceTags
+                toFieldPath: spec.forProvider.tags
+          - name: space-provider
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: spec.providerConfigRef.name
+        resources:
+          - name: subscription
+            base:
+              apiVersion: azure.m.upbound.io/v1beta1
+              kind: Subscription
+              spec:
+                managementPolicies: [Create, Observe, Update, Delete, LateInitialize]
+                providerConfigRef:
+                  kind: ClusterProviderConfig
+                  name: default
+                forProvider:
+                  workload: Production
+            patches:
+              - type: PatchSet
+                patchSetName: tags
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: billingScopeID
+                toFieldPath: spec.forProvider.billingScopeId
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.displayName
+                toFieldPath: spec.forProvider.subscriptionName
+                policy:
+                  fromFieldPath: Required
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.subscriptionId
+                toFieldPath: status.subscriptionID
+          - name: management-group-association
+            base:
+              apiVersion: management.azure.m.upbound.io/v1beta1
+              kind: ManagementGroupSubscriptionAssociation
+              spec:
+                managementPolicies: [Create, Observe, Update, LateInitialize]
+                providerConfigRef:
+                  kind: ClusterProviderConfig
+                  name: default
+            patches:
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: managementGroupID
+                toFieldPath: spec.forProvider.managementGroupId
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.subscriptionID
+                toFieldPath: spec.forProvider.subscriptionId
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "/subscriptions/%s"
+          - name: identity
+            base:
+              apiVersion: managedidentity.azure.m.upbound.io/v1beta1
+              kind: UserAssignedIdentity
+              spec:
+                providerConfigRef:
+                  kind: ClusterProviderConfig
+                  name: default
+            patches:
+              - type: PatchSet
+                patchSetName: tags
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: identityName
+                toFieldPath: spec.forProvider.name
+                policy:
+                  fromFieldPath: Required
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: defaultLocation
+                toFieldPath: spec.forProvider.location
+                policy:
+                  fromFieldPath: Required
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: identityResourceGroupName
+                toFieldPath: spec.forProvider.resourceGroupName
+                policy:
+                  fromFieldPath: Required
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.id
+                toFieldPath: status.identity.resourceID
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.clientId
+                toFieldPath: status.identity.clientID
+              - type: ToCompositeFieldPath
+                fromFieldPath: status.atProvider.principalId
+                toFieldPath: status.identity.principalID
+          - name: federated-credential
+            base:
+              apiVersion: managedidentity.azure.m.upbound.io/v1beta1
+              kind: FederatedIdentityCredential
+              metadata:
+                annotations:
+                  crossplane.io/external-name: crossplane-provider
+              spec:
+                providerConfigRef:
+                  kind: ClusterProviderConfig
+                  name: default
+                forProvider:
+                  audience:
+                    - api://AzureADTokenExchange
+                  subject: system:serviceaccount:crossplane-system:provider-azure
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.identity.resourceID
+                toFieldPath: spec.forProvider.parentId
+                policy:
+                  fromFieldPath: Required
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: oidcIssuerURL
+                toFieldPath: spec.forProvider.issuer
+                policy:
+                  fromFieldPath: Required
+          - name: role-assignment
+            base:
+              apiVersion: authorization.azure.m.upbound.io/v1beta1
+              kind: RoleAssignment
+              spec:
+                providerConfigRef:
+                  kind: ClusterProviderConfig
+                  name: default
+                forProvider:
+                  roleDefinitionName: Owner
+                  principalType: ServicePrincipal
+                  skipServicePrincipalAadCheck: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.identity.principalID
+                toFieldPath: spec.forProvider.principalId
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.subscriptionID
+                toFieldPath: spec.forProvider.scope
+                policy:
+                  fromFieldPath: Required
+                transforms:
+                  - type: string
+                    string:
+                      type: Format
+                      fmt: "/subscriptions/%s"
+          - name: ipam-pool-access
+            base:
+              apiVersion: authorization.azure.m.upbound.io/v1beta1
+              kind: RoleAssignment
+              spec:
+                providerConfigRef:
+                  kind: ClusterProviderConfig
+                  name: default
+                forProvider:
+                  roleDefinitionName: IPAM Pool User
+                  principalType: ServicePrincipal
+                  skipServicePrincipalAadCheck: true
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.identity.principalID
+                toFieldPath: spec.forProvider.principalId
+                policy:
+                  fromFieldPath: Required
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: ipamPoolID
+                toFieldPath: spec.forProvider.scope
+                policy:
+                  fromFieldPath: Required
+          - name: provider-config
+            base:
+              apiVersion: azure.m.upbound.io/v1beta1
+              kind: ProviderConfig
+              spec:
+                # Bucket disables shared keys; see upbound/provider-upjet-azure#1105.
+                storageUseAzureAD: true
+                credentials:
+                  source: OIDCTokenFile
+            patches:
+              - type: FromCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: metadata.name
+              - type: FromEnvironmentFieldPath
+                fromFieldPath: tenantID
+                toFieldPath: spec.tenantID
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.identity.clientID
+                toFieldPath: spec.clientID
+                policy:
+                  fromFieldPath: Required
+              - type: FromCompositeFieldPath
+                fromFieldPath: status.subscriptionID
+                toFieldPath: spec.subscriptionID
+                policy:
+                  fromFieldPath: Required
+              - type: ToCompositeFieldPath
+                fromFieldPath: metadata.name
+                toFieldPath: status.providerConfigName
+            readinessChecks:
+              - type: NonEmpty
+                fieldPath: spec.clientID
+          - name: register-provider-network
+            base:
+              apiVersion: azure.m.upbound.io/v1beta1
+              kind: ResourceProviderRegistration
+              spec:
+                managementPolicies: [Create, Observe, Update, LateInitialize]
+                providerConfigRef:
+                  kind: ProviderConfig
+                forProvider:
+                  name: Microsoft.Network
+                  feature:
+                  # Disable automatic creation of Network Watcher, makes cleanup easier
+                  - name: DisableNetworkWatcherAutocreation
+                    registered: true
+            patches:
+              - type: PatchSet
+                patchSetName: space-provider
+          - name: register-provider-storage
+            base:
+              apiVersion: azure.m.upbound.io/v1beta1
+              kind: ResourceProviderRegistration
+              spec:
+                managementPolicies: [Create, Observe, Update, LateInitialize]
+                providerConfigRef:
+                  kind: ProviderConfig
+                forProvider:
+                  name: Microsoft.Storage
+            patches:
+              - type: PatchSet
+                patchSetName: space-provider
+          - name: register-provider-keyvault
+            base:
+              apiVersion: azure.m.upbound.io/v1beta1
+              kind: ResourceProviderRegistration
+              spec:
+                managementPolicies: [Create, Observe, Update, LateInitialize]
+                providerConfigRef:
+                  kind: ProviderConfig
+                forProvider:
+                  name: Microsoft.KeyVault
+            patches:
+              - type: PatchSet
+                patchSetName: space-provider
+          - name: register-provider-compute
+            base:
+              apiVersion: azure.m.upbound.io/v1beta1
+              kind: ResourceProviderRegistration
+              spec:
+                managementPolicies: [Create, Observe, Update, LateInitialize]
+                providerConfigRef:
+                  kind: ProviderConfig
+                forProvider:
+                  name: Microsoft.Compute
+            patches:
+              - type: PatchSet
+                patchSetName: space-provider
+          - name: register-provider-app
+            base:
+              apiVersion: azure.m.upbound.io/v1beta1
+              kind: ResourceProviderRegistration
+              spec:
+                managementPolicies: [Create, Observe, Update, LateInitialize]
+                providerConfigRef:
+                  kind: ProviderConfig
+                forProvider:
+                  name: Microsoft.App
+            patches:
+              - type: PatchSet
+                patchSetName: space-provider
+    - step: sequence
+      functionRef:
+        name: function-sequencer
+      input:
+        apiVersion: sequencer.fn.crossplane.io/v1beta1
+        kind: Input
+        enableDeletionSequencing: true
+        usageVersion: v2
+        replayDeletion: true
+        resetCompositeReadiness: true
+        rules:
+          - sequence:
+              - subscription
+              - management-group-association
+              - role-assignment
+              - provider-config
+              - register-provider-.*
+          - sequence:
+              - identity
+              - federated-credential
+              - role-assignment
+          - sequence:
+              - identity
+              - ipam-pool-access
+    - step: auto-ready
+      functionRef:
+        name: function-auto-ready

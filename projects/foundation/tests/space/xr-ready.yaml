@@ -1,0 +1,17 @@
+apiVersion: platform.example.org/v1alpha1
+kind: Space
+metadata:
+  name: development
+  namespace: team-a
+spec:
+  displayName: team-a-development
+  exposure: private
+  tags:
+    environment: development
+    Owner: team-a
+status:
+  subscriptionID: "00000000-0000-4000-8000-000000000001"
+  identity:
+    resourceID: "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/platform-identities/providers/Microsoft.ManagedIdentity/userAssignedIdentities/space-test"
+    clientID: "00000000-0000-4000-8000-000000000003"
+    principalID: "00000000-0000-4000-8000-000000000004"

@@ -1,0 +1,28 @@
+# Platform settings the compositions read. Replace all placeholders before applying.
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: azure
+data:
+  # Tenant for the ProviderConfig each Space gets.
+  tenantID: "<azure-tenant-id>"
+  # The cluster's OIDC issuer, trusted by each Space's managed identity.
+  oidcIssuerURL: "<cluster-oidc-issuer-url>"
+  # Default Azure region for platform resources. In lowercase, one word, e.g., "swedencentral"
+  defaultLocation: "<azure-region>"
+  # Central resource group for each Space's managed identity.
+  identityResourceGroupName: "<identity-resource-group>"
+  # Billing scope new subscriptions are created in (EA enrollment account or MCA invoice section).
+  billingScopeID: "/providers/Microsoft.Billing/billingAccounts/<billing-account>/enrollmentAccounts/<enrollment-account>"
+  managementGroupIds:
+    corp: "/providers/Microsoft.Management/managementGroups/<corp-mg>"
+    online: "/providers/Microsoft.Management/managementGroups/<online-mg>"
+  # Up to 10 platform-owned tags, overriding matching user-facing tags.
+  # Platform tag keys must be lowercase for consistent precedence across APIs.
+  platformTags: {}
+  # Principal (object) ID of the managed identity in ClusterProviderConfig default.
+  platformPrincipalID: "<platform-identity-principal-id>"
+  # Network address space is allocated from this platform-owned IPAM pool.
+  ipamPoolID: "/subscriptions/<pool-subscription-id>/resourceGroups/<pool-rg>/providers/Microsoft.Network/networkManagers/<manager-name>/ipamPools/<pool-name>"
+  # Only Networks selecting private Spaces connect to this Virtual WAN hub.
+  virtualHubID: "/subscriptions/<hub-subscription-id>/resourceGroups/<hub-rg>/providers/Microsoft.Network/virtualHubs/<hub-name>"

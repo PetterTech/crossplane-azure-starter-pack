@@ -153,6 +153,14 @@ try {
         }
 
         $renderedOutput = Get-Content -LiteralPath $renderPath -Raw
+        if ($case.Name -eq 'space-ready') {
+            $configs = @([regex]::Split($renderedOutput, '(?m)^---\s*$') | Where-Object {
+                    $_ -match '(?m)^kind:\s+ProviderConfig\s*$'
+                })
+            if ($configs.Count -ne 1 -or $configs[0] -notmatch '(?m)^  storageUseAzureAD:\s+true\s*$') {
+                throw 'Expected the Space ProviderConfig to use Azure AD for storage.'
+            }
+        }
         if ($case.ContainsKey('PrivateConnections')) {
             foreach ($kind in @('RoleAssignment', 'VirtualHubConnection')) {
                 Assert-RenderedKind $renderedOutput $kind $case.PrivateConnections

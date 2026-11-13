@@ -156,8 +156,9 @@ pwsh -NoProfile -File ./tests/test.ps1
 ```
 
 The [test runner](tests/test.ps1) runs with PowerShell 7 on Windows, Linux and macOS.
-It renders all Space, Network and Bucket examples plus ready-state fixtures, then
-validates examples and output against the XRDs, pinned providers and Crossplane schemas.
+It renders all Space, Network, Bucket and SecretStore examples plus ready-state
+fixtures, then validates examples and output against the XRDs, pinned providers
+and Crossplane schemas.
 Missing schemas and failed checks return a nonzero exit code.
 Temporary output is removed; downloaded provider schemas and Docker images are cached.
 Each run fetches the namespaced Usage CRD from the pinned Crossplane release on GitHub;
@@ -342,6 +343,54 @@ Without `--observed-resources` only the Network Usage is created; the rest
 follows once it is ready. The test runner also checks dependency failures and
 container input limits. Rendering does not verify Azure permissions, DNS or
 deletion.
+
+### SecretStore
+
+A [SecretStore](projects/services/apis/secretstore/definition.yaml) is a
+private Key Vault. It selects a Network by name in the same namespace and uses
+that Network's Space and subnet. It owns a resource group named
+`secretstore-<metadata.name>`, a vault and a vault private endpoint in the
+Network subnet.
+
+Inputs are `network` (immutable) and optional `tags`. Platform-owned tags take
+precedence over user tags with matching keys. Region and tenant come from
+EnvironmentConfig.
+
+Hardening is fixed: standard SKU, Azure RBAC only, public network access off,
+no trusted-services bypass, purge protection and 90 days of soft delete. VM,
+disk encryption and template deployment access are off. Its name is `kv` plus a
+hash of subscription, namespace and name, shown in `status.vaultName`.
+
+The API creates no secrets, keys, certificates or role assignments. Grant data
+access with Azure RBAC, for example **Key Vault Secrets User** on
+`status.resourceID`. All resources use the Space's ProviderConfig. The
+composition does not create private DNS records; it relies on the Azure Landing
+Zones DeployIfNotExists policy for `privatelink.vaultcore.azure.net`. Without
+that policy, configure DNS yourself. Missing dependencies or empty status
+outputs fail reconciliation without dropping existing composed resources.
+
+Deleting a SecretStore deletes the endpoint, vault and resource group. Purge
+protection keeps the vault and its contents soft-deleted and recoverable for 90
+days, and its name stays reserved; recovery does not restore role assignments.
+A Usage keeps the Network, and through it the Space, until cleanup completes.
+See the [example](projects/services/examples/secretstore.yaml).
+
+#### Checking SecretStore locally
+
+```shell
+crossplane render projects/services/examples/secretstore.yaml \
+  projects/services/apis/secretstore/composition.yaml \
+  crossplane/functions.yaml \
+  --crossplane-version=v2.4.3 \
+  --xrd=projects/services/apis/secretstore/definition.yaml \
+  --required-resources=projects/services/tests/secretstore/environment.yaml \
+  --observed-resources=projects/services/tests/secretstore/observed-ready.yaml \
+  --include-full-xr
+```
+
+Without `--observed-resources` only the Network Usage is created; the rest
+follows once it is ready. The test runner also checks dependency failures.
+Rendering does not verify Azure permissions, DNS, recovery or deletion.
 
 ## License
 

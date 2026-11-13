@@ -1,0 +1,236 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: buckets.azure.platform.example.org
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: Bucket
+  mode: Pipeline
+  pipeline:
+    - step: environment
+      functionRef: {name: function-environment-configs}
+      input:
+        apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+        kind: Input
+        spec:
+          environmentConfigs:
+            - type: Reference
+              ref:
+                name: azure
+    # P&T cannot read other XRs. Resolve the Network, then its Space, into the environment.
+    - step: network
+      functionRef: {name: function-go-templating}
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{- $xr := .observed.composite.resource }}
+            {{- $env := index .context "apiextensions.crossplane.io/environment" }}
+            {{- if empty $env.defaultLocation }}{{ fail "EnvironmentConfig azure requires defaultLocation" }}{{ end }}
+            {{- $required := .requiredResources | default dict }}
+            {{- $network := dig "network" "items" (list) $required | first | default dict }}
+            {{- $space := dig "space" "items" (list) $required | first | default dict }}
+            {{- $spaceName := dig "resource" "spec" "space" "" $network }}
+            {{- if and (hasKey $required "network") (empty $network) }}
+            {{- fail (printf "Network %s not found in namespace %s" $xr.spec.network $xr.metadata.namespace) }}
+            {{- end }}
+            {{- if and $network (empty $spaceName) }}
+            {{- fail (printf "Network %s requires spec.space" $xr.spec.network) }}
+            {{- end }}
+            ---
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              network:
+                apiVersion: platform.example.org/v1alpha1
+                kind: Network
+                namespace: {{ $xr.metadata.namespace | quote }}
+                matchName: {{ $xr.spec.network | quote }}
+              {{- if $spaceName }}
+              space:
+                apiVersion: platform.example.org/v1alpha1
+                kind: Space
+                namespace: {{ $xr.metadata.namespace | quote }}
+                matchName: {{ $spaceName | quote }}
+              {{- end }}
+            {{- $subnetID := dig "resource" "status" "subnetID" "" $network }}
+            {{- $providerConfigName := dig "resource" "status" "providerConfigName" "" $space }}
+            {{- $subscriptionID := dig "resource" "status" "subscriptionID" "" $space }}
+            {{- if hasKey $required "space" }}
+            {{- if empty $space }}{{ fail (printf "Space %s not found in namespace %s" $spaceName $xr.metadata.namespace) }}{{ end }}
+            {{- if ne (getResourceCondition "Ready" $network.resource).Status "True" }}
+            {{- fail (printf "Network %s is not Ready" $xr.spec.network) }}
+            {{- end }}
+            {{- if ne (getResourceCondition "Ready" $space.resource).Status "True" }}
+            {{- fail (printf "Space %s is not Ready" $spaceName) }}
+            {{- end }}
+            {{- if empty $subnetID }}{{ fail (printf "Network %s requires status.subnetID" $xr.spec.network) }}{{ end }}
+            {{- if empty $providerConfigName }}{{ fail (printf "Space %s requires status.providerConfigName" $spaceName) }}{{ end }}
+            {{- if empty $subscriptionID }}{{ fail (printf "Space %s requires status.subscriptionID" $spaceName) }}{{ end }}
+            {{- $_ := set $env "subnetID" $subnetID }}
+            {{- $_ := set $env "providerConfigName" $providerConfigName }}
+            {{- $_ := set $env "resourceGroupName" (printf "bucket-%s" $xr.metadata.name) }}
+            {{- /* Storage account names are global: hash subscription, namespace and name. */}}
+            {{- $hash := sha256sum (printf "%s/%s/%s" $subscriptionID $xr.metadata.namespace $xr.metadata.name) }}
+            {{- $_ := set $env "accountName" (printf "st%s" (trunc 22 $hash)) }}
+            ---
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: Context
+            data:
+              apiextensions.crossplane.io/environment: {{ $env | toJson }}
+            {{- end }}
+    - step: compose
+      functionRef: {name: function-patch-and-transform}
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        patchSets:
+          - name: provider
+            patches: [{type: FromEnvironmentFieldPath, fromFieldPath: providerConfigName, toFieldPath: spec.providerConfigRef.name, policy: {fromFieldPath: Required}}]
+          - name: location
+            patches: [{type: FromEnvironmentFieldPath, fromFieldPath: defaultLocation, toFieldPath: spec.forProvider.location, policy: {fromFieldPath: Required}}]
+          - name: group
+            patches: [{type: FromEnvironmentFieldPath, fromFieldPath: resourceGroupName, toFieldPath: spec.forProvider.resourceGroupName, policy: {fromFieldPath: Required}}]
+          - name: tags
+            patches:
+              - {type: FromEnvironmentFieldPath, fromFieldPath: platformTags, toFieldPath: spec.forProvider.tags}
+              - {type: FromCompositeFieldPath, fromFieldPath: spec.tags, toFieldPath: spec.forProvider.tags, policy: {toFieldPath: MergeObjects}}
+        resources:
+          - name: network-usage
+            base:
+              apiVersion: protection.crossplane.io/v1beta1
+              kind: Usage
+              spec:
+                replayDeletion: true
+                of: {apiVersion: platform.example.org/v1alpha1, kind: Network, resourceRef: {}}
+                reason: A Bucket uses this Network.
+            patches:
+              - {type: FromCompositeFieldPath, fromFieldPath: spec.network, toFieldPath: spec.of.resourceRef.name}
+            readinessChecks:
+              - type: None
+          - name: resource-group
+            base:
+              apiVersion: azure.m.upbound.io/v1beta1
+              kind: ResourceGroup
+              spec:
+                providerConfigRef: {kind: ProviderConfig}
+            patches:
+              - {type: PatchSet, patchSetName: provider}
+              - {type: PatchSet, patchSetName: location}
+              - {type: PatchSet, patchSetName: tags}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: resourceGroupName, toFieldPath: "metadata.annotations[crossplane.io/external-name]", policy: {fromFieldPath: Required}}
+          - name: account
+            base:
+              apiVersion: storage.azure.m.upbound.io/v1beta1
+              kind: Account
+              spec:
+                providerConfigRef: {kind: ProviderConfig}
+                # Hardening is fixed: Entra ID only, private only, versioning and soft delete on.
+                forProvider:
+                  accountKind: StorageV2
+                  accountTier: Standard
+                  httpsTrafficOnlyEnabled: true
+                  minTlsVersion: TLS1_2
+                  sharedAccessKeyEnabled: false
+                  defaultToOauthAuthentication: true
+                  allowNestedItemsToBePublic: false
+                  crossTenantReplicationEnabled: false
+                  publicNetworkAccessEnabled: false
+                  isHnsEnabled: false
+                  sftpEnabled: false
+                  nfsv3Enabled: false
+                  localUserEnabled: false
+                  networkRules:
+                    defaultAction: Deny
+                    bypass: []
+                  blobProperties:
+                    versioningEnabled: true
+                    deleteRetentionPolicy: {days: 7}
+                    containerDeleteRetentionPolicy: {days: 7}
+            patches:
+              - {type: PatchSet, patchSetName: provider}
+              - {type: PatchSet, patchSetName: location}
+              - {type: PatchSet, patchSetName: group}
+              - {type: PatchSet, patchSetName: tags}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: accountName, toFieldPath: "metadata.annotations[crossplane.io/external-name]", policy: {fromFieldPath: Required}}
+              - type: FromCompositeFieldPath
+                fromFieldPath: spec.geoRedundant
+                toFieldPath: spec.forProvider.accountReplicationType
+                transforms:
+                  - {type: convert, convert: {toType: string}}
+                  - {type: map, map: {"false": ZRS, "true": GZRS}}
+              - {type: ToEnvironmentFieldPath, fromFieldPath: status.atProvider.id, toFieldPath: accountID}
+              - {type: ToCompositeFieldPath, fromFieldPath: "metadata.annotations[crossplane.io/external-name]", toFieldPath: status.accountName}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.atProvider.id, toFieldPath: status.resourceID}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.atProvider.primaryBlobEndpoint, toFieldPath: status.blobEndpoint}
+            readinessChecks:
+              - {type: MatchCondition, matchCondition: {type: Ready, status: "True"}}
+              - {type: NonEmpty, fieldPath: status.atProvider.id}
+          - name: private-endpoint
+            base:
+              apiVersion: network.azure.m.upbound.io/v1beta1
+              kind: PrivateEndpoint
+              spec:
+                providerConfigRef: {kind: ProviderConfig}
+                forProvider:
+                  privateServiceConnection:
+                    name: blob
+                    isManualConnection: false
+                    subresourceNames: [blob]
+            patches:
+              - {type: PatchSet, patchSetName: provider}
+              - {type: PatchSet, patchSetName: location}
+              - {type: PatchSet, patchSetName: group}
+              - {type: PatchSet, patchSetName: tags}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: accountName, toFieldPath: "metadata.annotations[crossplane.io/external-name]", policy: {fromFieldPath: Required}, transforms: [{type: string, string: {type: Format, fmt: "%s-blob"}}]}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: subnetID, toFieldPath: spec.forProvider.subnetId, policy: {fromFieldPath: Required}}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: accountID, toFieldPath: spec.forProvider.privateServiceConnection.privateConnectionResourceId, policy: {fromFieldPath: Required}}
+    # P&T cannot loop; kro would need another lookup of the generated Account.
+    - step: containers
+      functionRef: {name: function-go-templating}
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{- $xr := .observed.composite.resource }}
+            {{- $env := index .context "apiextensions.crossplane.io/environment" }}
+            {{- $account := getComposedResource . "account" | default dict }}
+            {{- $accountID := dig "status" "atProvider" "id" "" $account }}
+            {{- if and $account (empty $accountID) }}
+            {{- fail "Storage account requires status.atProvider.id before composing containers" }}
+            {{- end }}
+            {{- if $accountID }}
+            {{- range $xr.spec.containers }}
+            ---
+            apiVersion: storage.azure.m.upbound.io/v1beta1
+            kind: Container
+            metadata:
+              annotations:
+                {{ setResourceNameAnnotation (printf "container-%s" .name) }}
+                crossplane.io/external-name: {{ .name | quote }}
+            spec:
+              providerConfigRef: {kind: ProviderConfig, name: {{ $env.providerConfigName | quote }}}
+              forProvider:
+                storageAccountId: {{ $accountID | quote }}
+                containerAccessType: private
+            {{- end }}
+            {{- end }}
+    - step: sequence
+      functionRef: {name: function-sequencer}
+      input:
+        apiVersion: sequencer.fn.crossplane.io/v1beta1
+        kind: Input
+        enableDeletionSequencing: true
+        usageVersion: v2
+        replayDeletion: true
+        resetCompositeReadiness: true
+        rules:
+          - sequence: [network-usage, resource-group, account, private-endpoint]
+          - sequence: [account, container-.*]
+    - step: auto-ready
+      functionRef: {name: function-auto-ready}

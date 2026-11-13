@@ -1,0 +1,107 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: buckets.platform.example.org
+spec:
+  scope: Namespaced
+  group: platform.example.org
+  names:
+    kind: Bucket
+    plural: buckets
+  defaultCompositionRef:
+    name: buckets.azure.platform.example.org
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      additionalPrinterColumns:
+        - name: Network
+          type: string
+          jsonPath: .spec.network
+        - name: GeoRedundant
+          type: boolean
+          jsonPath: .spec.geoRedundant
+        - name: Account
+          type: string
+          jsonPath: .status.accountName
+      schema:
+        openAPIV3Schema:
+          type: object
+          description: >-
+            Private blob storage in a Network's Space: a resource group, a
+            hardened storage account, private containers and a blob private
+            endpoint in the Network subnet. Access is Microsoft Entra ID only;
+            public network access is disabled. Private DNS for the endpoint is
+            left to Azure Policy. Deleting a Bucket deletes the account and all
+            its data; deleted blobs and containers are not recoverable after the
+            account is gone.
+          x-kubernetes-validations:
+            - rule: size(self.metadata.name) <= 63
+              message: Bucket name must be at most 63 characters.
+          properties:
+            spec:
+              type: object
+              required: [network, containers]
+              properties:
+                network:
+                  type: string
+                  description: >-
+                    Name of a Network in this namespace. The Bucket uses the
+                    Network's Space and subnet. Immutable.
+                  minLength: 1
+                  maxLength: 63
+                  pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
+                  x-kubernetes-validations:
+                    - rule: self == oldSelf
+                      message: Network cannot change; create a new Bucket.
+                geoRedundant:
+                  type: boolean
+                  description: >-
+                    false keeps copies in three zones of one region. true also
+                    asynchronously keeps copies in the paired region. Immutable.
+                  default: false
+                  x-kubernetes-validations:
+                    - rule: self == oldSelf
+                      message: geoRedundant cannot change; create a new Bucket.
+                containers:
+                  type: array
+                  description: >-
+                    Private blob containers, 1 to 20. Removing an entry deletes
+                    that container and its data.
+                  minItems: 1
+                  maxItems: 20
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys: [name]
+                  items:
+                    type: object
+                    required: [name]
+                    properties:
+                      name:
+                        type: string
+                        description: Container name.
+                        minLength: 3
+                        maxLength: 63
+                        pattern: '^[a-z0-9]([a-z0-9]|-[a-z0-9])*$'
+                tags:
+                  type: object
+                  description: Up to 40 user tags. Platform-owned tags take precedence.
+                  default: {}
+                  maxProperties: 40
+                  additionalProperties:
+                    type: string
+                    maxLength: 256
+                  x-kubernetes-validations:
+                    - rule: "self.all(k, size(k) > 0 && size(k) <= 512 && !k.matches('[<>%&\\\\\\\\?/]+'))"
+                      message: Tag keys must be 1-512 characters and cannot contain < > % & \ ? /.
+            status:
+              type: object
+              properties:
+                accountName:
+                  type: string
+                  description: Storage account name.
+                resourceID:
+                  type: string
+                  description: Storage account Azure resource ID.
+                blobEndpoint:
+                  type: string
+                  description: Blob service endpoint, reachable through the private endpoint.

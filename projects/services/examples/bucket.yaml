@@ -1,0 +1,13 @@
+apiVersion: platform.example.org/v1alpha1
+kind: Bucket
+metadata:
+  name: reports
+  namespace: team-a
+spec:
+  network: private-network
+  containers:
+    - name: incoming
+    - name: archive
+  tags:
+    owner: team-a
+    environment: development

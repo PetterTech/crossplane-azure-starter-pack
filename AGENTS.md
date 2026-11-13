@@ -34,7 +34,7 @@ This repo is an accelerator for Crossplane v2 on Azure. Readers should be able t
 - Keep public inputs small and user-facing. Expose intent, not provider configuration or platform plumbing.
 - Keep platform settings and additional platform-owned tags in EnvironmentConfig. Merge tags so platform-owned values take precedence.
 - Space exposes displayName, exposure (`private` or `public`) and tags. Exposure selects the platform-configured corp or online management group.
-- Services select a Space by name in their namespace. Resolve its ProviderConfig explicitly; no auto-discovery or user-supplied credentials.
+- Services select a Space by name in their namespace, or a Network, which selects the Space. Resolve the Space's ProviderConfig explicitly; no auto-discovery or user-supplied credentials.
 
 ## Lifecycle
 

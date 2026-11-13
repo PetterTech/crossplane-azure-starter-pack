@@ -153,7 +153,7 @@ pwsh -NoProfile -File ./tests/test.ps1
 ```
 
 The [test runner](tests/test.ps1) runs with PowerShell 7 on Windows, Linux and macOS.
-It renders all Space and Network examples plus the ready-state Space fixture, then
+It renders all Space, Network and Bucket examples plus ready-state fixtures, then
 validates examples and output against the XRDs, pinned providers and Crossplane schemas.
 Missing schemas and failed checks return a nonzero exit code.
 Temporary output is removed; downloaded provider schemas and Docker images are cached.
@@ -182,8 +182,9 @@ Public inputs are `displayName`, `exposure` and optional `tags`:
 
 Try the [private](projects/foundation/examples/space-private.yaml) or
 [public](projects/foundation/examples/space-public.yaml) example in `team-a`.
-Wait for `Ready=True` before deploying services. Services select a Space by name
-in the same namespace and use its `status.providerConfigName`; callers do not
+Wait for `Ready=True` before deploying services. Services select a Space, by
+name or through a Network in the same namespace, and use its
+`status.providerConfigName`; callers do not
 choose credentials. Only platform controllers should write ProviderConfigs,
 managed resources or XR status; the namespace does not isolate Azure identities
 from the shared provider service account.
@@ -288,6 +289,54 @@ The private graph includes the hub connection and dependency Usages. Validate ex
 against the Network XRD, and full render output against that XRD, the pinned
 provider CRDs and Crossplane's v2 Usage CRD.
 Rendering does not verify Azure permissions, RBAC propagation, routing or deletion.
+
+### Bucket
+
+A [Bucket](projects/services/apis/bucket/definition.yaml) is private blob
+storage. It selects a Network by name in the same namespace and uses that
+Network's Space and subnet. It owns a resource group named
+`bucket-<metadata.name>`, a storage account, one private container per entry
+and a blob private endpoint in the Network subnet.
+
+Inputs are `network`, `containers` (1-20 names), `geoRedundant` and optional
+`tags`. `geoRedundant: false` (default) keeps copies in three zones (ZRS);
+`true` also copies asynchronously to the paired region (GZRS). Network and
+geoRedundant are immutable. Platform-owned tags take precedence over user tags
+with matching keys.
+
+The account is fixed to Microsoft Entra ID access only (no shared keys), TLS 1.2,
+no public network access, no anonymous access, blob versioning and 7 days of soft
+delete. Its name is `st` plus a hash of subscription, namespace and name, shown in
+`status.accountName`. Grant data access with Azure RBAC, for example
+**Storage Blob Data Contributor** on `status.resourceID`.
+
+All resources use the Space's ProviderConfig. The composition does not create
+private DNS records; it relies on the Azure Landing Zones DeployIfNotExists policy
+for `privatelink.blob.core.windows.net`. Without that policy, configure DNS yourself.
+The Network and its Space must be Ready with their subnet and identity outputs
+available. Missing dependencies fail reconciliation without dropping containers.
+
+Deleting a Bucket deletes the storage account and all its data. Removing a
+container from the list deletes that container. A Usage keeps the Network, and
+through it the Space, until Bucket cleanup completes. Delete with
+`--cascade=foreground`. See the [example](projects/services/examples/bucket.yaml).
+
+#### Checking Bucket locally
+
+```shell
+crossplane render projects/services/examples/bucket.yaml \
+  projects/services/apis/bucket/composition.yaml crossplane/functions.yaml \
+  --crossplane-version=v2.4.3 \
+  --xrd=projects/services/apis/bucket/definition.yaml \
+  --required-resources=projects/services/tests/bucket/environment.yaml \
+  --observed-resources=projects/services/tests/bucket/observed-ready.yaml \
+  --include-full-xr
+```
+
+Without `--observed-resources` only the Network Usage is created; the rest
+follows once it is ready. The test runner also checks dependency failures and
+container input limits. Rendering does not verify Azure permissions, DNS or
+deletion.
 
 ## License
 

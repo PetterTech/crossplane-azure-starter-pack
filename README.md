@@ -85,8 +85,8 @@ Then give the central identity access for subscription vending:
 - **Managed Identity Contributor** on the central identity resource group.
 - **Management Group Contributor** on the target corp and online management
   groups, or a suitable shared ancestor.
-- **User Access Administrator** on the IPAM pool, to grant Space identities
-  IPAM Pool User.
+- **Role Based Access Control Administrator** on the IPAM pool, with a condition
+  permitting only creation and deletion of **IPAM Pool User** assignments.
 - **Network Contributor** on the hub resource group, for hub connections.
 - Permission to create subscriptions in your billing account. This can't be done with `az role assignment`, see [Create subscriptions programmatically](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/programmatically-create-subscription)
 
@@ -99,6 +99,42 @@ az role assignment create \
 ```
 
 Repeat for the other target group, or use an appropriate shared ancestor.
+
+For the pool, use a [delegation condition][delegation-conditions] that restricts
+both creation and deletion to IPAM Pool User. Crossplane needs delete access to
+remove a Space's pool assignment when that Space is deleted.
+
+```shell
+az role assignment create \
+  --assignee-object-id <principalId> \
+  --assignee-principal-type ServicePrincipal \
+  --role "Role Based Access Control Administrator" \
+  --scope <ipam-pool-resource-id> \
+  --condition "(
+    (
+      !(ActionMatches{'Microsoft.Authorization/roleAssignments/write'})
+    )
+    OR
+    (
+      @Request[Microsoft.Authorization/roleAssignments:RoleDefinitionId]
+      ForAnyOfAnyValues:GuidEquals {7b3e853f-ad5d-4fb5-a7b8-56a3581c7037}
+    )
+  )
+  AND
+  (
+    (
+      !(ActionMatches{'Microsoft.Authorization/roleAssignments/delete'})
+    )
+    OR
+    (
+      @Resource[Microsoft.Authorization/roleAssignments:RoleDefinitionId]
+      ForAnyOfAnyValues:GuidEquals {7b3e853f-ad5d-4fb5-a7b8-56a3581c7037}
+    )
+  )" \
+  --condition-version 2.0
+```
+
+[delegation-conditions]: https://learn.microsoft.com/en-us/azure/role-based-access-control/delegate-role-assignments-overview#how-to-delegate-role-assignment-management-with-conditions
 
 Not on AKS? Any cluster with a public OIDC issuer works the same way. See [Workload identity federation](https://learn.microsoft.com/en-us/entra/workload-id/workload-identity-federation).
 
@@ -141,7 +177,8 @@ Public inputs are `displayName`, `exposure` and optional `tags`:
 - Managed identities use the platform's shared `defaultLocation`.
 - Exposure is immutable. It controls governance placement, not network access.
 - Up to 40 user tags are merged with up to 10 platform tags from EnvironmentConfig.
-  Platform-owned values override matching keys, ignoring case as Azure does.
+  Platform-owned values take precedence over user tags with matching keys.
+  Space matches tag keys case-insensitively.
 
 Try the [private](projects/foundation/examples/space-private.yaml) or
 [public](projects/foundation/examples/space-public.yaml) example in `team-a`.
@@ -195,10 +232,17 @@ Space by name in the same namespace. It owns a resource group, an IPAM-backed
 VNet, one subnet using the entire allocation, and an attached NSG with **no custom
 rules**. Azure default NSG rules still apply; this is not spoke isolation.
 
+The resource group is named `network-<metadata.name>`, so its name stays stable
+when the cluster is rebuilt from Git. The XRD's 82-character name limit keeps
+the Azure name within 90 characters; Crossplane v2.4 also enforces a stricter
+63-character XR name limit. Existing UID-based resource group names require a
+planned migration.
+
 Inputs are `space`, `size` (small `/25`, medium `/24`, large `/23`; default medium)
-and optional `tags`. Space and size are immutable. Platform tags override user
-tags with the same key. There are no credential, subnet or hub
-switches. App infrastructure subnets are out of scope.
+and optional `tags`. Space and size are immutable.
+Platform-owned values take precedence over user tags with matching keys.
+Network matches tag keys exactly. There are no credential, subnet or hub switches.
+App infrastructure subnets are out of scope.
 
 Networks in private Spaces connect to the platform Virtual WAN hub. Networks in
 public Spaces do not; this does not automatically expose them to the Internet.

@@ -233,10 +233,7 @@ VNet, one subnet using the entire allocation, and an attached NSG with **no cust
 rules**. Azure default NSG rules still apply; this is not spoke isolation.
 
 The resource group is named `network-<metadata.name>`, so its name stays stable
-when the cluster is rebuilt from Git. The XRD's 82-character name limit keeps
-the Azure name within 90 characters; Crossplane v2.4 also enforces a stricter
-63-character XR name limit. Existing UID-based resource group names require a
-planned migration.
+when the cluster is rebuilt from Git.
 
 Inputs are `space`, `size` (small `/25`, medium `/24`, large `/23`; default medium)
 and optional `tags`. Space and size are immutable.

@@ -118,9 +118,9 @@ $bucketDependencies = @(
     @{ Name = 'network-not-ready'; Kind = 'Network'; NotReady = $true }
     @{ Name = 'space-not-ready'; Kind = 'Space'; NotReady = $true }
     @{ Name = 'missing-account-id'; Kind = 'Account'; Field = 'id' }
-    @{ Name = 'empty-subnet-id'; Kind = 'Network'; Empty = 'subnetID'; UsageOnly = $true }
-    @{ Name = 'empty-provider-config'; Kind = 'Space'; Empty = 'providerConfigName'; UsageOnly = $true }
-    @{ Name = 'empty-subscription-id'; Kind = 'Space'; Empty = 'subscriptionID'; UsageOnly = $true }
+    @{ Name = 'empty-subnet-id'; Kind = 'Network'; Empty = 'subnetID'; Error = 'waiting for Network private-network and Space development to publish status' }
+    @{ Name = 'empty-provider-config'; Kind = 'Space'; Empty = 'providerConfigName'; Error = 'waiting for Network private-network and Space development to publish status' }
+    @{ Name = 'empty-subscription-id'; Kind = 'Space'; Empty = 'subscriptionID'; Error = 'waiting for Network private-network and Space development to publish status' }
 )
 
 $output = Join-Path ([System.IO.Path]::GetTempPath()) "crossplane-tests-$([guid]::NewGuid())"
@@ -299,15 +299,7 @@ try {
                 throw "Bucket dependency $($case.Name) failed: $(Get-Content -LiteralPath $errorPath -Raw)"
             }
             $renderedOutput = Get-Content -LiteralPath $errorPath -Raw
-            if ($case.ContainsKey('Empty')) {
-                # Empty status values must hold every Azure resource until they are published.
-                foreach ($kind in @('ResourceGroup', 'Account', 'PrivateEndpoint', 'Container')) {
-                    Assert-RenderedKind $renderedOutput $kind $false
-                }
-            }
-            else {
-                Assert-RenderedKind $renderedOutput 'Container' $true
-            }
+            Assert-RenderedKind $renderedOutput 'Container' $true
             continue
         }
         if ($LASTEXITCODE -eq 0) {

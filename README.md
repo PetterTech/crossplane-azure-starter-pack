@@ -318,7 +318,8 @@ All resources use the Space's ProviderConfig. The composition does not create
 private DNS records; it relies on the Azure Landing Zones DeployIfNotExists policy
 for `privatelink.blob.core.windows.net`. Without that policy, configure DNS yourself.
 The Network and its Space must have their subnet and identity outputs available.
-Missing dependencies fail reconciliation without dropping containers.
+Missing dependencies or empty status outputs fail reconciliation without
+dropping existing composed resources.
 
 Deleting a Bucket deletes the storage account and all its data. Removing a
 container from the list deletes that container. A Usage keeps the Network, and

@@ -197,7 +197,7 @@ rules**. Azure default NSG rules still apply; this is not spoke isolation.
 
 Inputs are `space`, `size` (small `/25`, medium `/24`, large `/23`; default medium)
 and optional `tags`. Space and size are immutable. Platform tags override user
-tags, including case-insensitive matches. There are no credential, subnet or hub
+tags with the same key. There are no credential, subnet or hub
 switches. App infrastructure subnets are out of scope.
 
 Networks in private Spaces connect to the platform Virtual WAN hub. Networks in
@@ -222,7 +222,6 @@ Networks and requires a planned migration.
 The shared hub does not isolate team networks. Configure hub routing before
 production, and use quotas and pool monitoring to manage IP address exhaustion.
 
-Delete with `kubectl delete network <name> -n <namespace> --cascade=foreground`.
 Sequenced v2 Usages preserve the VNet grant until its hub connection is removed.
 A Usage protects the selected Space until
 Network cleanup completes. Neither the central pool nor hub is owned or deleted.

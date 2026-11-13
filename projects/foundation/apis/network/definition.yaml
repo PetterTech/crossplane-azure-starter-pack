@@ -34,7 +34,6 @@ spec:
             platform Virtual WAN hub; public Spaces do not.
             Deleting a Network removes its Azure resources and access grant,
             but never the platform pool or hub.
-            Delete with foreground cascading deletion before deleting its Space.
           x-kubernetes-validations:
             - rule: size(self.metadata.name) <= 63
               message: Network name must be at most 63 characters.

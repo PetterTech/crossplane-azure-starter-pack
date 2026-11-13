@@ -17,6 +17,7 @@ This repo is an accelerator for Crossplane v2 on Azure. Readers should be able t
 - Stacks may depend on foundation and services. Services may depend on foundation. Foundation must not depend on either services or stacks.
 - Keep the landing zone aligned with Azure Landing Zones subscription vending.
 - Functions, in order of preference: patch-and-transform, then function-kro, then go-templating. Use the first one that can do the job cleanly. function-sequencer handles ordering, auto-ready goes last. Do not write custom functions or add new languages, scripts or build steps.
+- Lookups of other XRs use one small go-templating step; function-kro can't read the pipeline environment.
 - Each composition must be readable on its own. No shared templates copied between compositions.
 - Prefer one obvious way. Do not add auto-discovery, fallbacks or options nobody asked for.
 - Name APIs after what the user wants, not the Azure resource behind it (`Bucket`, not `StorageAccount`).

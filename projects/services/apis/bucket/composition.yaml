@@ -57,6 +57,8 @@ spec:
             {{- $subscriptionID := dig "resource" "status" "subscriptionID" "" $space }}
             {{- if hasKey $required "space" }}
             {{- if empty $space }}{{ fail (printf "Space %s not found in namespace %s" $spaceName $xr.metadata.namespace) }}{{ end }}
+            {{- /* Empty strings pass Required. Set nothing until Network and Space publish status. */}}
+            {{- if and $subnetID $providerConfigName $subscriptionID }}
             {{- $_ := set $env "subnetID" $subnetID }}
             {{- $_ := set $env "providerConfigName" $providerConfigName }}
             {{- $_ := set $env "resourceGroupName" (printf "bucket-%s" $xr.metadata.name) }}
@@ -81,6 +83,7 @@ spec:
               forProvider:
                 storageAccountIdSelector: {matchControllerRef: true}
                 containerAccessType: private
+            {{- end }}
             {{- end }}
             {{- end }}
     - step: compose

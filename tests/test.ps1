@@ -118,6 +118,9 @@ $bucketDependencies = @(
     @{ Name = 'network-not-ready'; Kind = 'Network'; NotReady = $true }
     @{ Name = 'space-not-ready'; Kind = 'Space'; NotReady = $true }
     @{ Name = 'missing-account-id'; Kind = 'Account'; Field = 'id' }
+    @{ Name = 'empty-subnet-id'; Kind = 'Network'; Empty = 'subnetID'; UsageOnly = $true }
+    @{ Name = 'empty-provider-config'; Kind = 'Space'; Empty = 'providerConfigName'; UsageOnly = $true }
+    @{ Name = 'empty-subscription-id'; Kind = 'Space'; Empty = 'subscriptionID'; UsageOnly = $true }
 )
 
 $output = Join-Path ([System.IO.Path]::GetTempPath()) "crossplane-tests-$([guid]::NewGuid())"
@@ -256,6 +259,9 @@ try {
             if ($case.ContainsKey('Field')) {
                 $updated = $document -replace "(?m)^ +$($case.Field):[^\r\n]*(\r?\n|$)", ''
             }
+            elseif ($case.ContainsKey('Empty')) {
+                $updated = $document -replace "(?m)^( +$($case.Empty):)[^\r\n]*", '$1 ""'
+            }
             else {
                 $updated = $document.Replace('status: "True"', 'status: "False"')
             }
@@ -292,7 +298,16 @@ try {
             if ($LASTEXITCODE -ne 0) {
                 throw "Bucket dependency $($case.Name) failed: $(Get-Content -LiteralPath $errorPath -Raw)"
             }
-            Assert-RenderedKind (Get-Content -LiteralPath $errorPath -Raw) 'Container' $true
+            $renderedOutput = Get-Content -LiteralPath $errorPath -Raw
+            if ($case.ContainsKey('Empty')) {
+                # Empty status values must hold every Azure resource until they are published.
+                foreach ($kind in @('ResourceGroup', 'Account', 'PrivateEndpoint', 'Container')) {
+                    Assert-RenderedKind $renderedOutput $kind $false
+                }
+            }
+            else {
+                Assert-RenderedKind $renderedOutput 'Container' $true
+            }
             continue
         }
         if ($LASTEXITCODE -eq 0) {

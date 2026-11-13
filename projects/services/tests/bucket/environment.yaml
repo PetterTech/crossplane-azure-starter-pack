@@ -1,0 +1,35 @@
+# Synthetic render fixtures, not an Azure configuration to deploy.
+apiVersion: apiextensions.crossplane.io/v1beta1
+kind: EnvironmentConfig
+metadata:
+  name: azure
+data:
+  defaultLocation: westeurope
+  platformTags:
+    owner: platform
+    managed-by: crossplane
+---
+apiVersion: platform.example.org/v1alpha1
+kind: Network
+metadata:
+  name: private-network
+  namespace: team-a
+spec:
+  space: development
+  size: medium
+status:
+  conditions: [{type: Ready, status: "True"}]
+  subnetID: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/network-private-network/providers/Microsoft.Network/virtualNetworks/network/subnets/default"
+---
+apiVersion: platform.example.org/v1alpha1
+kind: Space
+metadata:
+  name: development
+  namespace: team-a
+spec:
+  displayName: Development
+  exposure: private
+status:
+  conditions: [{type: Ready, status: "True"}]
+  subscriptionID: "00000000-0000-4000-8000-000000000010"
+  providerConfigName: space-credentials

@@ -1,0 +1,10 @@
+apiVersion: platform.example.org/v1alpha1
+kind: Bucket
+metadata:
+  name: reports
+  namespace: team-a
+spec:
+  network: private-network
+  geoRedundant: true
+  containers:
+    - name: incoming

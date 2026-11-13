@@ -260,6 +260,7 @@ spec:
               apiVersion: azure.m.upbound.io/v1beta1
               kind: ProviderConfig
               spec:
+                # Bucket disables shared keys; see upbound/provider-upjet-azure#1105.
                 storageUseAzureAD: true
                 credentials:
                   source: OIDCTokenFile

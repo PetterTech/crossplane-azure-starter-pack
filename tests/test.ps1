@@ -111,17 +111,13 @@ $cases = @(
     }
 )
 
-$bucketFailures = @(
+$bucketDependencies = @(
     @{ Name = 'missing-network'; Kind = 'Network'; Remove = $true; Error = 'Network private-network not found' }
     @{ Name = 'missing-space'; Kind = 'Space'; Remove = $true; Error = 'Space development not found' }
     @{ Name = 'missing-space-before-storage'; Kind = 'Space'; Remove = $true; UsageOnly = $true; Error = 'Space development not found' }
-    @{ Name = 'network-not-ready'; Kind = 'Network'; NotReady = $true; Error = 'Network private-network is not Ready' }
-    @{ Name = 'space-not-ready'; Kind = 'Space'; NotReady = $true; Error = 'Space development is not Ready' }
-    @{ Name = 'missing-subnet'; Kind = 'Network'; Field = 'subnetID'; Error = 'Network private-network requires status.subnetID' }
-    @{ Name = 'missing-provider-config'; Kind = 'Space'; Field = 'providerConfigName'; Error = 'Space development requires status.providerConfigName' }
-    @{ Name = 'missing-subscription'; Kind = 'Space'; Field = 'subscriptionID'; Error = 'Space development requires status.subscriptionID' }
-    @{ Name = 'missing-location'; Kind = 'EnvironmentConfig'; Field = 'defaultLocation'; Error = 'EnvironmentConfig azure requires defaultLocation' }
-    @{ Name = 'missing-account-id'; Kind = 'Account'; Field = 'id'; Error = 'Storage account requires status.atProvider.id' }
+    @{ Name = 'network-not-ready'; Kind = 'Network'; NotReady = $true }
+    @{ Name = 'space-not-ready'; Kind = 'Space'; NotReady = $true }
+    @{ Name = 'missing-account-id'; Kind = 'Account'; Field = 'id' }
 )
 
 $output = Join-Path ([System.IO.Path]::GetTempPath()) "crossplane-tests-$([guid]::NewGuid())"
@@ -205,8 +201,8 @@ try {
                 throw "Expected $(3 + $case.Containers) ProviderConfig references, found $($configs.Count)."
             }
             foreach ($config in $configs) {
-                if ($config.Groups[1].Value -ne 'space-credentials') {
-                    throw "Expected ProviderConfig 'space-credentials', found '$($config.Groups[1].Value)'."
+                if ($config.Groups[1].Value -ne 'development') {
+                    throw "Expected ProviderConfig 'development', found '$($config.Groups[1].Value)'."
                 }
             }
             Assert-RenderedKind $renderedOutput 'PrivateEndpoint' $true
@@ -230,15 +226,18 @@ try {
                 throw 'Bucket private endpoint must use the selected Network subnet.'
             }
             $privateContainers = [regex]::Matches($renderedOutput, '(?m)^    containerAccessType: private\s*$')
-            $accountReferences = [regex]::Matches($renderedOutput, '(?m)^    storageAccountId: /subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/bucket-reports/providers/Microsoft.Storage/storageAccounts/stb6858ae51a3bb88cef7fd3\s*$')
+            $accountReferences = [regex]::Matches($renderedOutput, '(?m)^    storageAccountIdSelector:\r?\n      matchControllerRef: true\s*$')
             if ($privateContainers.Count -ne $case.Containers -or $accountReferences.Count -ne $case.Containers) {
-                throw 'All Bucket containers must be private and reference the observed account ID.'
+                throw 'All Bucket containers must be private and select the account by controller reference.'
+            }
+            if ($renderedOutput -match '(?m)^    storageAccountId:') {
+                throw 'Bucket containers must not copy the observed account ID.'
             }
         }
     }
 
-    foreach ($case in $bucketFailures) {
-        Write-Host "Checking Bucket failure: $($case.Name)"
+    foreach ($case in $bucketDependencies) {
+        Write-Host "Checking Bucket dependency: $($case.Name)"
         $fixture = Join-Path $services 'tests\bucket'
         $required = Get-Content -LiteralPath (Join-Path $fixture 'environment.yaml') -Raw
         $observed = Get-Content -LiteralPath (Join-Path $fixture 'observed-ready.yaml') -Raw
@@ -289,6 +288,13 @@ try {
             "--xrd=$(Join-Path $services 'apis\bucket\definition.yaml')" `
             "--required-resources=$requiredPath" "--observed-resources=$observedPath" `
             > $errorPath 2>&1
+        if (-not $case.ContainsKey('Error')) {
+            if ($LASTEXITCODE -ne 0) {
+                throw "Bucket dependency $($case.Name) failed: $(Get-Content -LiteralPath $errorPath -Raw)"
+            }
+            Assert-RenderedKind (Get-Content -LiteralPath $errorPath -Raw) 'Container' $true
+            continue
+        }
         if ($LASTEXITCODE -eq 0) {
             throw "Bucket failure $($case.Name) unexpectedly rendered successfully."
         }

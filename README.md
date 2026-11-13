@@ -317,13 +317,13 @@ namespace and name, shown in `status.accountName`. Grant data access with Azure 
 All resources use the Space's ProviderConfig. The composition does not create
 private DNS records; it relies on the Azure Landing Zones DeployIfNotExists policy
 for `privatelink.blob.core.windows.net`. Without that policy, configure DNS yourself.
-The Network and its Space must be Ready with their subnet and identity outputs
-available. Missing dependencies fail reconciliation without dropping containers.
+The Network and its Space must have their subnet and identity outputs available.
+Missing dependencies fail reconciliation without dropping containers.
 
 Deleting a Bucket deletes the storage account and all its data. Removing a
 container from the list deletes that container. A Usage keeps the Network, and
-through it the Space, until Bucket cleanup completes. Delete with
-`--cascade=foreground`. See the [example](projects/services/examples/bucket.yaml).
+through it the Space, until Bucket cleanup completes.
+See the [example](projects/services/examples/bucket.yaml).
 
 #### Checking Bucket locally
 

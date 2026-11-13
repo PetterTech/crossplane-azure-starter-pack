@@ -18,7 +18,7 @@ spec:
             - type: Reference
               ref:
                 name: azure
-    # P&T cannot read other XRs. Resolve the Network, then its Space, into the environment.
+    # P&T cannot read other XRs or loop. Resolve Network and Space, and render containers.
     - step: network
       functionRef: {name: function-go-templating}
       input:
@@ -29,16 +29,12 @@ spec:
           template: |
             {{- $xr := .observed.composite.resource }}
             {{- $env := index .context "apiextensions.crossplane.io/environment" }}
-            {{- if empty $env.defaultLocation }}{{ fail "EnvironmentConfig azure requires defaultLocation" }}{{ end }}
             {{- $required := .requiredResources | default dict }}
             {{- $network := dig "network" "items" (list) $required | first | default dict }}
             {{- $space := dig "space" "items" (list) $required | first | default dict }}
             {{- $spaceName := dig "resource" "spec" "space" "" $network }}
             {{- if and (hasKey $required "network") (empty $network) }}
             {{- fail (printf "Network %s not found in namespace %s" $xr.spec.network $xr.metadata.namespace) }}
-            {{- end }}
-            {{- if and $network (empty $spaceName) }}
-            {{- fail (printf "Network %s requires spec.space" $xr.spec.network) }}
             {{- end }}
             ---
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
@@ -61,15 +57,6 @@ spec:
             {{- $subscriptionID := dig "resource" "status" "subscriptionID" "" $space }}
             {{- if hasKey $required "space" }}
             {{- if empty $space }}{{ fail (printf "Space %s not found in namespace %s" $spaceName $xr.metadata.namespace) }}{{ end }}
-            {{- if ne (getResourceCondition "Ready" $network.resource).Status "True" }}
-            {{- fail (printf "Network %s is not Ready" $xr.spec.network) }}
-            {{- end }}
-            {{- if ne (getResourceCondition "Ready" $space.resource).Status "True" }}
-            {{- fail (printf "Space %s is not Ready" $spaceName) }}
-            {{- end }}
-            {{- if empty $subnetID }}{{ fail (printf "Network %s requires status.subnetID" $xr.spec.network) }}{{ end }}
-            {{- if empty $providerConfigName }}{{ fail (printf "Space %s requires status.providerConfigName" $spaceName) }}{{ end }}
-            {{- if empty $subscriptionID }}{{ fail (printf "Space %s requires status.subscriptionID" $spaceName) }}{{ end }}
             {{- $_ := set $env "subnetID" $subnetID }}
             {{- $_ := set $env "providerConfigName" $providerConfigName }}
             {{- $_ := set $env "resourceGroupName" (printf "bucket-%s" $xr.metadata.name) }}
@@ -81,6 +68,20 @@ spec:
             kind: Context
             data:
               apiextensions.crossplane.io/environment: {{ $env | toJson }}
+            {{- range $xr.spec.containers }}
+            ---
+            apiVersion: storage.azure.m.upbound.io/v1beta1
+            kind: Container
+            metadata:
+              annotations:
+                {{ setResourceNameAnnotation (printf "container-%s" .name) }}
+                crossplane.io/external-name: {{ .name | quote }}
+            spec:
+              providerConfigRef: {kind: ProviderConfig, name: {{ $env.providerConfigName | quote }}}
+              forProvider:
+                storageAccountIdSelector: {matchControllerRef: true}
+                containerAccessType: private
+            {{- end }}
             {{- end }}
     - step: compose
       functionRef: {name: function-patch-and-transform}
@@ -187,38 +188,6 @@ spec:
               - {type: FromEnvironmentFieldPath, fromFieldPath: accountName, toFieldPath: "metadata.annotations[crossplane.io/external-name]", policy: {fromFieldPath: Required}, transforms: [{type: string, string: {type: Format, fmt: "%s-blob"}}]}
               - {type: FromEnvironmentFieldPath, fromFieldPath: subnetID, toFieldPath: spec.forProvider.subnetId, policy: {fromFieldPath: Required}}
               - {type: FromEnvironmentFieldPath, fromFieldPath: accountID, toFieldPath: spec.forProvider.privateServiceConnection.privateConnectionResourceId, policy: {fromFieldPath: Required}}
-    # P&T cannot loop; kro would need another lookup of the generated Account.
-    - step: containers
-      functionRef: {name: function-go-templating}
-      input:
-        apiVersion: gotemplating.fn.crossplane.io/v1beta1
-        kind: GoTemplate
-        source: Inline
-        inline:
-          template: |
-            {{- $xr := .observed.composite.resource }}
-            {{- $env := index .context "apiextensions.crossplane.io/environment" }}
-            {{- $account := getComposedResource . "account" | default dict }}
-            {{- $accountID := dig "status" "atProvider" "id" "" $account }}
-            {{- if and $account (empty $accountID) }}
-            {{- fail "Storage account requires status.atProvider.id before composing containers" }}
-            {{- end }}
-            {{- if $accountID }}
-            {{- range $xr.spec.containers }}
-            ---
-            apiVersion: storage.azure.m.upbound.io/v1beta1
-            kind: Container
-            metadata:
-              annotations:
-                {{ setResourceNameAnnotation (printf "container-%s" .name) }}
-                crossplane.io/external-name: {{ .name | quote }}
-            spec:
-              providerConfigRef: {kind: ProviderConfig, name: {{ $env.providerConfigName | quote }}}
-              forProvider:
-                storageAccountId: {{ $accountID | quote }}
-                containerAccessType: private
-            {{- end }}
-            {{- end }}
     - step: sequence
       functionRef: {name: function-sequencer}
       input:

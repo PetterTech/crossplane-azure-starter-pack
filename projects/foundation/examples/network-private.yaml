@@ -8,3 +8,4 @@ spec:
   size: medium
   tags:
     owner: team-a
+    environment: development

@@ -14,6 +14,46 @@ $foundation = Join-Path $root 'projects\foundation'
 $functions = Join-Path $root 'crossplane\functions.yaml'
 $providers = Join-Path $root 'crossplane\providers.yaml'
 $crossplaneVersion = 'v2.4.3'
+
+function Assert-RenderedKind {
+    param(
+        [string]$Rendered,
+        [string]$Kind,
+        [bool]$Expected
+    )
+
+    $found = [regex]::IsMatch($Rendered, "(?m)^kind:\s+$([regex]::Escape($Kind))\s*$")
+    if ($found -ne $Expected) {
+        $expectation = if ($Expected) { 'present' } else { 'absent' }
+        throw "Expected $Kind to be $expectation in rendered output."
+    }
+}
+
+function Assert-RenderedTags {
+    param(
+        [string]$Rendered,
+        [string[]]$Kinds,
+        [System.Collections.IDictionary]$Expected
+    )
+
+    $documents = [regex]::Split($Rendered, '(?m)^---\s*$')
+    foreach ($kind in $Kinds) {
+        $resources = @($documents | Where-Object {
+                $_ -match "(?m)^kind:\s+$([regex]::Escape($kind))\s*$"
+            })
+        if ($resources.Count -ne 1) {
+            throw "Expected one rendered $kind, found $($resources.Count)."
+        }
+
+        foreach ($key in $Expected.Keys) {
+            $pattern = "(?m)^      $([regex]::Escape([string]$key)):\s+$([regex]::Escape([string]$Expected[$key]))\s*$"
+            if ($resources[0] -notmatch $pattern) {
+                throw "Rendered $kind is missing expected tag '${key}: $($Expected[$key])'."
+            }
+        }
+    }
+}
+
 $cases = @(
     @{ Name = 'space-private'; Api = 'space'; XR = 'examples\space-private.yaml' }
     @{ Name = 'space-public'; Api = 'space'; XR = 'examples\space-public.yaml' }
@@ -28,12 +68,19 @@ $cases = @(
         Api = 'network'
         XR = 'examples\network-private.yaml'
         Observed = 'tests\network\observed-ready.yaml'
+        PrivateConnections = $true
+        ExpectedTags = @{
+            owner = 'platform'
+            'managed-by' = 'crossplane'
+            environment = 'development'
+        }
     }
     @{
         Name = 'network-public'
         Api = 'network'
         XR = 'examples\network-public.yaml'
         Observed = 'tests\network\observed-public.yaml'
+        PrivateConnections = $false
     }
 )
 
@@ -58,9 +105,22 @@ try {
         if ($case.ContainsKey('Observed')) {
             $arguments += "--observed-resources=$(Join-Path $foundation $case.Observed)"
         }
-        & crossplane @arguments > (Join-Path $rendered "$($case.Name).yaml")
+        $renderPath = Join-Path $rendered "$($case.Name).yaml"
+        & crossplane @arguments > $renderPath
         if ($LASTEXITCODE -ne 0) {
             throw "Rendering $($case.Name) failed."
+        }
+
+        $renderedOutput = Get-Content -LiteralPath $renderPath -Raw
+        if ($case.ContainsKey('PrivateConnections')) {
+            foreach ($kind in @('RoleAssignment', 'VirtualHubConnection')) {
+                Assert-RenderedKind $renderedOutput $kind $case.PrivateConnections
+            }
+        }
+        if ($case.ContainsKey('ExpectedTags')) {
+            Assert-RenderedTags $renderedOutput `
+                @('ResourceGroup', 'VirtualNetwork', 'SecurityGroup') `
+                $case.ExpectedTags
         }
     }
 

@@ -237,7 +237,8 @@ crossplane render projects/foundation/examples/network-private.yaml \
   --crossplane-version=v2.4.3 \
   --xrd=projects/foundation/apis/network/definition.yaml \
   --required-resources=projects/foundation/tests/network/environment.yaml \
-  --observed-resources=projects/foundation/tests/network/observed-ready.yaml
+  --observed-resources=projects/foundation/tests/network/observed-ready.yaml \
+  --include-full-xr
 ```
 
 Repeat with `network-public.yaml` and

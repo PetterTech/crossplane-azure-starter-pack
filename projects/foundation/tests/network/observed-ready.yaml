@@ -22,7 +22,7 @@ metadata:
   annotations: {crossplane.io/composition-resource-name: vnet}
 status:
   atProvider:
-    id: "/subscriptions/00000000-0000-4000-8000-000000000008/resourceGroups/network-8de0184b-53d7-51c5-abf0-0dcc2e8afe26/providers/Microsoft.Network/virtualNetworks/network"
+    id: "/subscriptions/00000000-0000-4000-8000-000000000008/resourceGroups/network-private-network/providers/Microsoft.Network/virtualNetworks/network"
     addressSpace: [10.20.0.0/24]
   conditions: [{type: Ready, status: "True"}]
 ---
@@ -34,7 +34,7 @@ metadata:
   annotations: {crossplane.io/composition-resource-name: subnet}
 status:
   atProvider:
-    id: "/subscriptions/00000000-0000-4000-8000-000000000008/resourceGroups/network-8de0184b-53d7-51c5-abf0-0dcc2e8afe26/providers/Microsoft.Network/virtualNetworks/network/subnets/default"
+    id: "/subscriptions/00000000-0000-4000-8000-000000000008/resourceGroups/network-private-network/providers/Microsoft.Network/virtualNetworks/network/subnets/default"
   conditions: [{type: Ready, status: "True"}]
 ---
 apiVersion: network.azure.m.upbound.io/v1beta1
@@ -45,7 +45,7 @@ metadata:
   annotations: {crossplane.io/composition-resource-name: nsg}
 status:
   atProvider:
-    id: "/subscriptions/00000000-0000-4000-8000-000000000008/resourceGroups/network-8de0184b-53d7-51c5-abf0-0dcc2e8afe26/providers/Microsoft.Network/networkSecurityGroups/network"
+    id: "/subscriptions/00000000-0000-4000-8000-000000000008/resourceGroups/network-private-network/providers/Microsoft.Network/networkSecurityGroups/network"
   conditions: [{type: Ready, status: "True"}]
 ---
 apiVersion: network.azure.m.upbound.io/v1beta1

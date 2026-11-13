@@ -26,7 +26,7 @@ spec:
         environment:
           patches:
             - type: FromCompositeFieldPath
-              fromFieldPath: metadata.uid
+              fromFieldPath: metadata.name
               toFieldPath: networkName
               policy: {fromFieldPath: Required}
               transforms: [{type: string, string: {type: Format, fmt: "network-%s"}}]

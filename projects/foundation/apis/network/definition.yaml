@@ -35,8 +35,8 @@ spec:
             Deleting a Network removes its Azure resources and access grant,
             but never the platform pool or hub.
           x-kubernetes-validations:
-            - rule: size(self.metadata.name) <= 63
-              message: Network name must be at most 63 characters.
+            - rule: size(self.metadata.name) <= 82
+              message: Network name must be at most 82 characters.
           properties:
             spec:
               type: object

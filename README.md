@@ -143,6 +143,9 @@ Not on AKS? Any cluster with a public OIDC issuer works the same way. See [Workl
 - Replace `platform.example.org` with your own domain and fill in the platform templates.
 - Think through identity: which identity each team gets, and what it is allowed to do.
 - Lock down what teams can create. Teams should only get access to your platform APIs, not to provider resources or ProviderConfigs.
+- A closed Bucket account requires the cluster to reach its private endpoint for
+  provider data-plane calls. Azure Landing Zones policies that deny public network
+  access will block Bucket.
 
 ## Local checks
 
@@ -292,7 +295,7 @@ Rendering does not verify Azure permissions, RBAC propagation, routing or deleti
 
 ### Bucket
 
-A [Bucket](projects/services/apis/bucket/definition.yaml) is private blob
+A [Bucket](projects/services/apis/bucket/definition.yaml) is blob
 storage. It selects a Network by name in the same namespace and uses that
 Network's Space and subnet. It owns a resource group named
 `bucket-<metadata.name>`, a storage account, one private container per entry
@@ -304,10 +307,11 @@ Inputs are `network`, `containers` (1-20 names), `geoRedundant` and optional
 geoRedundant are immutable. Platform-owned tags take precedence over user tags
 with matching keys.
 
-The account is fixed to Microsoft Entra ID access only (no shared keys), TLS 1.2,
-no public network access, no anonymous access, blob versioning and 7 days of soft
-delete. Its name is `st` plus a hash of subscription, namespace and name, shown in
-`status.accountName`. Grant data access with Azure RBAC, for example
+The account has a public endpoint because the provider must reach the data plane
+on create and every read. Access is Microsoft Entra ID only (no shared keys or
+anonymous access); apps should use the private endpoint. TLS 1.2, blob versioning
+and 7 days of soft delete are fixed. Its name is `st` plus a hash of subscription,
+namespace and name, shown in `status.accountName`. Grant data access with Azure RBAC, for example
 **Storage Blob Data Contributor** on `status.resourceID`.
 
 All resources use the Space's ProviderConfig. The composition does not create

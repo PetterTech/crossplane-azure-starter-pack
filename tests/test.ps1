@@ -212,16 +212,19 @@ try {
             Assert-RenderedKind $renderedOutput 'PrivateEndpoint' $true
             foreach ($setting in @(
                     'sharedAccessKeyEnabled: false'
-                    'publicNetworkAccessEnabled: false'
+                    'publicNetworkAccessEnabled: true'
+                    'defaultToOauthAuthentication: true'
                     'allowNestedItemsToBePublic: false'
                     'httpsTrafficOnlyEnabled: true'
                     'minTlsVersion: TLS1_2'
                     'versioningEnabled: true'
-                    'defaultAction: Deny'
                 )) {
                 if ($renderedOutput -notmatch "(?m)^ +$([regex]::Escape($setting))\s*$") {
                     throw "Bucket is missing hardening setting '$setting'."
                 }
+            }
+            if ($renderedOutput -match '(?m)^ +networkRules:') {
+                throw 'Bucket must not restrict provider data-plane access with network rules.'
             }
             if ($renderedOutput -notmatch '(?m)^    subnetId: /subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/network-private-network/providers/Microsoft.Network/virtualNetworks/network/subnets/default\s*$') {
                 throw 'Bucket private endpoint must use the selected Network subnet.'

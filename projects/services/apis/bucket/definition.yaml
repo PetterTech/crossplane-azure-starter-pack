@@ -28,13 +28,14 @@ spec:
         openAPIV3Schema:
           type: object
           description: >-
-            Private blob storage in a Network's Space: a resource group, a
+            Blob storage in a Network's Space: a resource group, a
             hardened storage account, private containers and a blob private
             endpoint in the Network subnet. Access is Microsoft Entra ID only;
-            public network access is disabled. Private DNS for the endpoint is
-            left to Azure Policy. Deleting a Bucket deletes the account and all
-            its data; deleted blobs and containers are not recoverable after the
-            account is gone.
+            the account has a public endpoint because the provider must reach
+            the data plane. Apps should use the private endpoint. Private DNS
+            for the endpoint is left to Azure Policy. Deleting a Bucket deletes
+            the account and all its data; deleted blobs and containers are not
+            recoverable after the account is gone.
           x-kubernetes-validations:
             - rule: size(self.metadata.name) <= 63
               message: Bucket name must be at most 63 characters.

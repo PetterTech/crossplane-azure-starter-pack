@@ -128,7 +128,7 @@ spec:
               kind: Account
               spec:
                 providerConfigRef: {kind: ProviderConfig}
-                # Hardening is fixed: Entra ID only, private only, versioning and soft delete on.
+                # Hardening is fixed: Entra ID only, versioning and soft delete on.
                 forProvider:
                   accountKind: StorageV2
                   accountTier: Standard
@@ -138,14 +138,13 @@ spec:
                   defaultToOauthAuthentication: true
                   allowNestedItemsToBePublic: false
                   crossTenantReplicationEnabled: false
-                  publicNetworkAccessEnabled: false
+                  # The provider calls the data plane on create/read; it cannot assume private endpoint reachability.
+                  # Set back to false once the provider exposes dataPlaneAvailable.
+                  publicNetworkAccessEnabled: true
                   isHnsEnabled: false
                   sftpEnabled: false
                   nfsv3Enabled: false
                   localUserEnabled: false
-                  networkRules:
-                    defaultAction: Deny
-                    bypass: []
                   blobProperties:
                     versioningEnabled: true
                     deleteRetentionPolicy: {days: 7}

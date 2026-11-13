@@ -69,6 +69,7 @@ $cases = @(
         XR = 'examples\network-private.yaml'
         Observed = 'tests\network\observed-ready.yaml'
         PrivateConnections = $true
+        ResourceGroup = 'network-private-network'
         ExpectedTags = @{
             owner = 'platform'
             'managed-by' = 'crossplane'
@@ -81,6 +82,7 @@ $cases = @(
         XR = 'examples\network-public.yaml'
         Observed = 'tests\network\observed-public.yaml'
         PrivateConnections = $false
+        ResourceGroup = 'network-public-network'
     }
 )
 
@@ -115,6 +117,19 @@ try {
         if ($case.ContainsKey('PrivateConnections')) {
             foreach ($kind in @('RoleAssignment', 'VirtualHubConnection')) {
                 Assert-RenderedKind $renderedOutput $kind $case.PrivateConnections
+            }
+            $groupName = [regex]::Escape($case.ResourceGroup)
+            if ($renderedOutput -notmatch "(?m)^    crossplane\.io/external-name:\s+$groupName\s*$") {
+                throw "Expected resource group external name '$($case.ResourceGroup)'."
+            }
+            $groupReferences = [regex]::Matches($renderedOutput, '(?m)^    resourceGroupName:\s+(\S+)\s*$')
+            if ($groupReferences.Count -ne 3) {
+                throw "Expected three resource group references, found $($groupReferences.Count)."
+            }
+            foreach ($reference in $groupReferences) {
+                if ($reference.Groups[1].Value -ne $case.ResourceGroup) {
+                    throw "Expected resource group reference '$($case.ResourceGroup)', found '$($reference.Groups[1].Value)'."
+                }
             }
         }
         if ($case.ContainsKey('ExpectedTags')) {

@@ -109,18 +109,39 @@ $cases = @(
         Replication = 'GZRS'
         Containers = 1
     }
+    @{ Name = 'secretstore'; Project = $services; Api = 'secretstore'; XR = 'examples\secretstore.yaml' }
+    @{
+        Name = 'secretstore-ready'
+        Project = $services
+        Api = 'secretstore'
+        XR = 'examples\secretstore.yaml'
+        Observed = 'tests\secretstore\observed-ready.yaml'
+        ExpectedTags = @{
+            owner = 'platform'
+            'managed-by' = 'crossplane'
+            environment = 'development'
+        }
+    }
 )
 
-$bucketDependencies = @(
-    @{ Name = 'missing-network'; Kind = 'Network'; Remove = $true; Error = 'Network private-network not found' }
-    @{ Name = 'missing-space'; Kind = 'Space'; Remove = $true; Error = 'Space development not found' }
-    @{ Name = 'missing-space-before-storage'; Kind = 'Space'; Remove = $true; UsageOnly = $true; Error = 'Space development not found' }
-    @{ Name = 'network-not-ready'; Kind = 'Network'; NotReady = $true }
-    @{ Name = 'space-not-ready'; Kind = 'Space'; NotReady = $true }
-    @{ Name = 'missing-account-id'; Kind = 'Account'; Field = 'id' }
-    @{ Name = 'empty-subnet-id'; Kind = 'Network'; Empty = 'subnetID'; Error = 'waiting for Network private-network and Space development to publish status' }
-    @{ Name = 'empty-provider-config'; Kind = 'Space'; Empty = 'providerConfigName'; Error = 'waiting for Network private-network and Space development to publish status' }
-    @{ Name = 'empty-subscription-id'; Kind = 'Space'; Empty = 'subscriptionID'; Error = 'waiting for Network private-network and Space development to publish status' }
+$waiting = 'waiting for Network private-network and Space development to publish status'
+$dependencies = @(
+    @{ Api = 'bucket'; Name = 'missing-network'; Kind = 'Network'; Remove = $true; Error = 'Network private-network not found' }
+    @{ Api = 'bucket'; Name = 'missing-space'; Kind = 'Space'; Remove = $true; Error = 'Space development not found' }
+    @{ Api = 'bucket'; Name = 'missing-space-before-storage'; Kind = 'Space'; Remove = $true; UsageOnly = $true; Error = 'Space development not found' }
+    @{ Api = 'bucket'; Name = 'network-not-ready'; Kind = 'Network'; NotReady = $true }
+    @{ Api = 'bucket'; Name = 'space-not-ready'; Kind = 'Space'; NotReady = $true }
+    @{ Api = 'bucket'; Name = 'missing-account-id'; Kind = 'Account'; Field = 'id' }
+    @{ Api = 'bucket'; Name = 'empty-subnet-id'; Kind = 'Network'; Empty = 'subnetID'; Error = $waiting }
+    @{ Api = 'bucket'; Name = 'empty-provider-config'; Kind = 'Space'; Empty = 'providerConfigName'; Error = $waiting }
+    @{ Api = 'bucket'; Name = 'empty-subscription-id'; Kind = 'Space'; Empty = 'subscriptionID'; Error = $waiting }
+    @{ Api = 'secretstore'; Name = 'missing-network'; Kind = 'Network'; Remove = $true; Error = 'Network private-network not found' }
+    @{ Api = 'secretstore'; Name = 'missing-space'; Kind = 'Space'; Remove = $true; Error = 'Space development not found' }
+    @{ Api = 'secretstore'; Name = 'network-not-ready'; Kind = 'Network'; NotReady = $true }
+    @{ Api = 'secretstore'; Name = 'space-not-ready'; Kind = 'Space'; NotReady = $true }
+    @{ Api = 'secretstore'; Name = 'empty-subnet-id'; Kind = 'Network'; Empty = 'subnetID'; Error = $waiting }
+    @{ Api = 'secretstore'; Name = 'empty-provider-config'; Kind = 'Space'; Empty = 'providerConfigName'; Error = $waiting }
+    @{ Api = 'secretstore'; Name = 'missing-tenant'; Kind = 'EnvironmentConfig'; Field = 'tenantID'; Error = 'EnvironmentConfig azure must provide defaultLocation and tenantID' }
 )
 
 $output = Join-Path ([System.IO.Path]::GetTempPath()) "crossplane-tests-$([guid]::NewGuid())"
@@ -182,6 +203,9 @@ try {
             $taggedKinds = if ($case.Api -eq 'bucket') {
                 @('ResourceGroup', 'Account', 'PrivateEndpoint')
             }
+            elseif ($case.Api -eq 'secretstore') {
+                @('ResourceGroup', 'Vault', 'PrivateEndpoint')
+            }
             else {
                 @('ResourceGroup', 'VirtualNetwork', 'SecurityGroup')
             }
@@ -237,11 +261,45 @@ try {
                 throw 'Bucket containers must not copy the observed account ID.'
             }
         }
+        if ($case.Name -eq 'secretstore') {
+            Assert-RenderedKind $renderedOutput 'Vault' $false
+        }
+        if ($case.Name -eq 'secretstore-ready') {
+            foreach ($setting in @(
+                    'skuName: standard'
+                    'rbacAuthorizationEnabled: true'
+                    'purgeProtectionEnabled: true'
+                    'softDeleteRetentionDays: 90'
+                    'publicNetworkAccessEnabled: false'
+                    'enabledForDeployment: false'
+                    'enabledForDiskEncryption: false'
+                    'enabledForTemplateDeployment: false'
+                    'defaultAction: Deny'
+                    'bypass: None'
+                    'tenantId: 00000000-0000-4000-8000-000000000001'
+                    'subnetId: /subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/network-private-network/providers/Microsoft.Network/virtualNetworks/network/subnets/default'
+                    'resourceGroupName: secretstore-app-secrets'
+                )) {
+                if ($renderedOutput -notmatch "(?m)^ +$([regex]::Escape($setting))\s*$") {
+                    throw "SecretStore is missing setting '$setting'."
+                }
+            }
+            if ($renderedOutput -notmatch '(?m)^  vaultName:\s+kv[0-9a-f]{22}\s*$') {
+                throw 'Expected status.vaultName to be a hashed Key Vault name.'
+            }
+            if ($renderedOutput -notmatch '(?m)^  privateEndpointID:\s+\S+\s*$') {
+                throw 'Expected status.privateEndpointID.'
+            }
+            $configs = [regex]::Matches($renderedOutput, '(?m)^    kind: ProviderConfig\r?\n    name:\s+development\s*$')
+            if ($configs.Count -ne 3) {
+                throw "Expected three resources using ProviderConfig 'development', found $($configs.Count)."
+            }
+        }
     }
 
-    foreach ($case in $bucketDependencies) {
-        Write-Host "Checking Bucket dependency: $($case.Name)"
-        $fixture = Join-Path $services 'tests\bucket'
+    foreach ($case in $dependencies) {
+        Write-Host "Checking $($case.Api) dependency: $($case.Name)"
+        $fixture = Join-Path $services "tests\$($case.Api)"
         $required = Get-Content -LiteralPath (Join-Path $fixture 'environment.yaml') -Raw
         $observed = Get-Content -LiteralPath (Join-Path $fixture 'observed-ready.yaml') -Raw
         $source = if ($case.Kind -eq 'Account') { $observed } else { $required }
@@ -288,25 +346,26 @@ try {
         $errorPath = Join-Path $output 'failure.txt'
         Set-Content -LiteralPath $requiredPath -Value $required
         Set-Content -LiteralPath $observedPath -Value $observed
-        & crossplane render (Join-Path $services 'examples\bucket.yaml') `
-            (Join-Path $services 'apis\bucket\composition.yaml') $functions `
+        & crossplane render (Join-Path $services "examples\$($case.Api).yaml") `
+            (Join-Path $services "apis\$($case.Api)\composition.yaml") $functions `
             "--crossplane-version=$crossplaneVersion" `
-            "--xrd=$(Join-Path $services 'apis\bucket\definition.yaml')" `
+            "--xrd=$(Join-Path $services "apis\$($case.Api)\definition.yaml")" `
             "--required-resources=$requiredPath" "--observed-resources=$observedPath" `
             > $errorPath 2>&1
         if (-not $case.ContainsKey('Error')) {
             if ($LASTEXITCODE -ne 0) {
-                throw "Bucket dependency $($case.Name) failed: $(Get-Content -LiteralPath $errorPath -Raw)"
+                throw "$($case.Api) dependency $($case.Name) failed: $(Get-Content -LiteralPath $errorPath -Raw)"
             }
             $renderedOutput = Get-Content -LiteralPath $errorPath -Raw
-            Assert-RenderedKind $renderedOutput 'Container' $true
+            $lastKind = if ($case.Api -eq 'bucket') { 'Container' } else { 'PrivateEndpoint' }
+            Assert-RenderedKind $renderedOutput $lastKind $true
             continue
         }
         if ($LASTEXITCODE -eq 0) {
-            throw "Bucket failure $($case.Name) unexpectedly rendered successfully."
+            throw "$($case.Api) failure $($case.Name) unexpectedly rendered successfully."
         }
         if ((Get-Content -LiteralPath $errorPath -Raw) -notmatch [regex]::Escape($case.Error)) {
-            throw "Bucket failure $($case.Name) did not report '$($case.Error)': $(Get-Content -LiteralPath $errorPath -Raw)"
+            throw "$($case.Api) failure $($case.Name) did not report '$($case.Error)': $(Get-Content -LiteralPath $errorPath -Raw)"
         }
     }
 
@@ -322,6 +381,7 @@ try {
         (Join-Path $foundation 'apis\space\definition.yaml')
         (Join-Path $foundation 'apis\network\definition.yaml')
         (Join-Path $services 'apis\bucket\definition.yaml')
+        (Join-Path $services 'apis\secretstore\definition.yaml')
     ) -join ','
     $resources = @(
         (Join-Path $foundation 'examples')

@@ -37,6 +37,10 @@ spec:
             patches: [{type: FromEnvironmentFieldPath, fromFieldPath: defaultLocation, toFieldPath: spec.forProvider.location, policy: {fromFieldPath: Required}}]
           - name: group
             patches: [{type: FromEnvironmentFieldPath, fromFieldPath: networkName, toFieldPath: spec.forProvider.resourceGroupName, policy: {fromFieldPath: Required}}]
+          - name: tags
+            patches:
+              - {type: FromEnvironmentFieldPath, fromFieldPath: platformTags, toFieldPath: spec.forProvider.tags}
+              - {type: FromCompositeFieldPath, fromFieldPath: spec.tags, toFieldPath: spec.forProvider.tags, policy: {toFieldPath: MergeObjects}}
         resources:
           - name: space-usage
             base:
@@ -45,10 +49,9 @@ spec:
               spec:
                 replayDeletion: true
                 of: {apiVersion: platform.example.org/v1alpha1, kind: Space, resourceRef: {}}
-                by: {apiVersion: platform.example.org/v1alpha1, kind: Network, resourceRef: {}}
+                reason: A Network uses this Space.
             patches:
               - {type: FromCompositeFieldPath, fromFieldPath: spec.space, toFieldPath: spec.of.resourceRef.name}
-              - {type: FromCompositeFieldPath, fromFieldPath: metadata.name, toFieldPath: spec.by.resourceRef.name}
             readinessChecks:
               - type: None
           - name: resource-group
@@ -60,6 +63,7 @@ spec:
             patches:
               - {type: PatchSet, patchSetName: provider}
               - {type: PatchSet, patchSetName: location}
+              - {type: PatchSet, patchSetName: tags}
               - {type: FromEnvironmentFieldPath, fromFieldPath: networkName, toFieldPath: "metadata.annotations[crossplane.io/external-name]", policy: {fromFieldPath: Required}}
           - name: vnet
             base:
@@ -67,12 +71,14 @@ spec:
               kind: VirtualNetwork
               metadata: {annotations: {crossplane.io/external-name: network}}
               spec:
+                # No LateInitialize: addressSpace and ipAddressPool are mutually exclusive.
                 managementPolicies: [Create, Observe, Update, Delete]
                 providerConfigRef: {kind: ProviderConfig}
             patches:
               - {type: PatchSet, patchSetName: provider}
               - {type: PatchSet, patchSetName: location}
               - {type: PatchSet, patchSetName: group}
+              - {type: PatchSet, patchSetName: tags}
               - {type: FromEnvironmentFieldPath, fromFieldPath: ipamPoolID, toFieldPath: "spec.forProvider.ipAddressPool[0].id", policy: {fromFieldPath: Required}}
               - type: FromCompositeFieldPath
                 fromFieldPath: spec.size
@@ -116,6 +122,7 @@ spec:
               - {type: PatchSet, patchSetName: provider}
               - {type: PatchSet, patchSetName: location}
               - {type: PatchSet, patchSetName: group}
+              - {type: PatchSet, patchSetName: tags}
               - {type: ToEnvironmentFieldPath, fromFieldPath: status.atProvider.id, toFieldPath: nsgID}
             readinessChecks:
               - {type: MatchCondition, matchCondition: {type: Ready, status: "True"}}
@@ -140,10 +147,8 @@ spec:
           template: |
             {{- $xr := .observed.composite.resource }}
             {{- $env := index .context "apiextensions.crossplane.io/environment" }}
-            {{- $extra := .requiredResources | default dict }}
-            {{- range $key := list "defaultLocation" "ipamPoolID" }}
-            {{- if empty (index $env $key) }}{{ fail (printf "EnvironmentConfig azure requires %s" $key) }}{{ end }}
-            {{- end }}
+            {{- $space := dig "space" "items" (list) (.requiredResources | default dict) | first | default dict }}
+            {{- $vnetID := dig "status" "atProvider" "id" "" (getComposedResource . "vnet" | default dict) }}
             ---
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
             kind: ExtraResources
@@ -153,45 +158,10 @@ spec:
                 kind: Space
                 namespace: {{ $xr.metadata.namespace | quote }}
                 matchName: {{ $xr.spec.space | quote }}
-            {{- if hasKey $extra "space" }}
-            {{- $spaces := dig "space" "items" (list) $extra }}
-            {{- if ne (len $spaces) 1 }}{{ fail (printf "Space %s/%s not found" $xr.metadata.namespace $xr.spec.space) }}{{ end }}
-            {{- $space := (index $spaces 0).resource }}
-            {{- if ne $space.metadata.namespace $xr.metadata.namespace }}{{ fail "Space must be in the Network namespace" }}{{ end }}
-            {{- range $name := list "resource-group" "vnet" "subnet" "nsg" "association" }}
-            {{- if and (getComposedResource $ $name) (not (hasKey ($.desired.resources | default dict) $name)) }}{{ fail (printf "Cannot render existing %s: required input is missing" $name) }}{{ end }}
-            {{- end }}
-            {{- if and (getComposedResource . "subnet") (empty (dig "status" "atProvider" "addressSpace" (list) (getComposedResource . "vnet" | default dict))) }}{{ fail "Existing subnet requires the observed VNet address space" }}{{ end }}
-            {{- if getComposedResource . "association" }}
-            {{- range $name := list "subnet" "nsg" }}
-            {{- if empty (dig "status" "atProvider" "id" "" (getComposedResource $ $name | default dict)) }}{{ fail (printf "Existing association requires the observed %s ID" $name) }}{{ end }}
-            {{- end }}
-            {{- end }}
-            {{- $platformKeys := dict }}
-            {{- range $key, $_ := $env.platformTags }}{{ $_ := set $platformKeys (lower $key) true }}{{ end }}
-            {{- $tags := dict }}
-            {{- range $key, $value := dig "spec" "tags" (dict) $xr }}
-            {{- if not (hasKey $platformKeys (lower $key)) }}{{ $_ := set $tags $key $value }}{{ end }}
-            {{- end }}
-            {{- $_ := mergeOverwrite $tags $env.platformTags }}
-            {{- range $name := list "resource-group" "vnet" "nsg" }}
-            {{- $entry := get ($.desired.resources | default dict) $name }}
-            {{- if $entry }}
-            {{- $resource := deepCopy $entry.resource }}
-            {{- $_ := set $resource.spec.forProvider "tags" $tags }}
-            {{- $_ := set $resource.metadata.annotations "gotemplating.fn.crossplane.io/composition-resource-name" $name }}
-            {{- $_ := set $resource.metadata.annotations "gotemplating.fn.crossplane.io/ready" (ternary "True" "False" (eq (get $entry "ready") "READY_TRUE")) }}
-            ---
-            {{ $resource | toYaml }}
-            {{- end }}
-            {{- end }}
-            {{- if eq $space.spec.exposure "private" }}
+            {{- if and $vnetID (eq (dig "resource" "spec" "exposure" "" $space) "private") }}
             {{- range $key := list "platformPrincipalID" "virtualHubID" }}
             {{- if empty (index $env $key) }}{{ fail (printf "EnvironmentConfig azure requires %s" $key) }}{{ end }}
             {{- end }}
-            {{- $vnetID := dig "status" "atProvider" "id" "" (getComposedResource . "vnet" | default dict) }}
-            {{- if and (empty $vnetID) (or (getComposedResource . "platformAccess") (getComposedResource . "hubConnection")) }}{{ fail "Existing connection requires the observed VNet ID" }}{{ end }}
-            {{- if $vnetID }}
             ---
             apiVersion: authorization.azure.m.upbound.io/v1beta1
             kind: RoleAssignment
@@ -218,8 +188,6 @@ spec:
               forProvider:
                 virtualHubId: {{ $env.virtualHubID | quote }}
                 remoteVirtualNetworkId: {{ $vnetID | quote }}
-            {{- end }}
-            {{- end }}
             {{- end }}
     - step: sequence
       functionRef: {name: function-sequencer}

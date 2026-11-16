@@ -424,6 +424,37 @@ $containerSpec
         }
     }
 
+    Write-Host 'Checking Bucket tag key length limits'
+    foreach ($length in @(128, 129)) {
+        $tagKey = 'a' * $length
+        $xr = @"
+apiVersion: platform.example.org/v1alpha1
+kind: Bucket
+metadata:
+  name: tag-key-limits
+  namespace: team-a
+spec:
+  network: private-network
+  containers:
+    - name: data
+  tags:
+    ${tagKey}: test
+"@
+        $xrPath = Join-Path $output 'tag-key-limits.yaml'
+        $validationPath = Join-Path $output 'tag-key-validation.txt'
+        Set-Content -LiteralPath $xrPath -Value $xr
+        & crossplane resource validate (Join-Path $services 'apis\bucket\definition.yaml') `
+            $xrPath "--crossplane-image=xpkg.crossplane.io/crossplane/crossplane:$crossplaneVersion" `
+            --error-on-missing-schemas > $validationPath 2>&1
+        $valid = $LASTEXITCODE -eq 0
+        if ($valid -ne ($length -eq 128)) {
+            throw "Unexpected validation result for a $length-character tag key: $(Get-Content -LiteralPath $validationPath -Raw)"
+        }
+        if (-not $valid -and (Get-Content -LiteralPath $validationPath -Raw) -notmatch 'Tag keys must be 1-128 characters') {
+            throw "Expected a tag key length validation error: $(Get-Content -LiteralPath $validationPath -Raw)"
+        }
+    }
+
     Write-Host 'All render and validation checks passed.'
 }
 finally {

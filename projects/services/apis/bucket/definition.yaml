@@ -92,8 +92,8 @@ spec:
                     type: string
                     maxLength: 256
                   x-kubernetes-validations:
-                    - rule: "self.all(k, size(k) > 0 && size(k) <= 512 && !k.matches('[<>%&\\\\\\\\?/]+'))"
-                      message: Tag keys must be 1-512 characters and cannot contain < > % & \ ? /.
+                    - rule: "self.all(k, size(k) > 0 && size(k) <= 128 && !k.matches('[<>%&\\\\\\\\?/]+'))"
+                      message: Tag keys must be 1-128 characters and cannot contain < > % & \ ? /.
             status:
               type: object
               properties:

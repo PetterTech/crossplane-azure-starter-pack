@@ -19,6 +19,7 @@ data:
     online: "/providers/Microsoft.Management/managementGroups/<online-mg>"
   # Up to 10 platform-owned tags, overriding matching user-facing tags.
   # Platform tag keys must be lowercase for consistent precedence across APIs.
+  # Keep keys to 1-128 characters because tags are applied directly to Storage Accounts.
   platformTags: {}
   # Principal (object) ID of the managed identity in ClusterProviderConfig default.
   platformPrincipalID: "<platform-identity-principal-id>"

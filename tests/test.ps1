@@ -12,6 +12,7 @@ if ($LASTEXITCODE -ne 0) {
 $root = Split-Path $PSScriptRoot -Parent
 $foundation = Join-Path $root 'projects\foundation'
 $services = Join-Path $root 'projects\services'
+$stacks = Join-Path $root 'projects\stacks'
 $functions = Join-Path $root 'crossplane\functions.yaml'
 $providers = Join-Path $root 'crossplane\providers.yaml'
 $crossplaneVersion = 'v2.4.3'
@@ -483,6 +484,232 @@ try {
         }
     }
 
+    $landingZoneKinds = @('Space', 'Network', 'Bucket', 'SecretStore')
+    $landingZoneCases = @(
+        @{ Name = 'initial'; ObservedKinds = @(); Kinds = @('Space') }
+        @{ Name = 'space-ready'; ObservedKinds = @('Space'); Kinds = @('Space', 'Network') }
+        @{ Name = 'network-ready'; ObservedKinds = @('Space', 'Network'); Kinds = $landingZoneKinds }
+        @{ Name = 'bucket-ready'; ObservedKinds = @('Space', 'Network', 'Bucket'); Kinds = $landingZoneKinds }
+        @{ Name = 'secretstore-ready'; ObservedKinds = @('Space', 'Network', 'SecretStore'); Kinds = $landingZoneKinds }
+        @{ Name = 'ready'; ObservedKinds = $landingZoneKinds; Kinds = $landingZoneKinds; Ready = $true }
+        @{ Name = 'public-ready'; ObservedKinds = $landingZoneKinds; Kinds = $landingZoneKinds; Ready = $true; Public = $true }
+    )
+    $requiredOutputs = @{
+        Space = @('subscriptionID', 'providerConfigName')
+        Network = @('subnetID')
+        Bucket = @('accountName', 'blobEndpoint')
+        SecretStore = @('vaultName', 'vaultURI')
+    }
+    foreach ($kind in $landingZoneKinds) {
+        foreach ($fault in @('NotReady', 'NoCondition') + $requiredOutputs[$kind]) {
+            $landingZoneCases += @{
+                Name = "$kind-$fault-regression"; ObservedKinds = $landingZoneKinds
+                Kinds = $landingZoneKinds; FaultKind = $kind; Fault = $fault
+            }
+        }
+        foreach ($field in $requiredOutputs[$kind]) {
+            $landingZoneCases += @{
+                Name = "$kind-$field-missing"; ObservedKinds = $landingZoneKinds
+                Kinds = $landingZoneKinds; FaultKind = $kind; Fault = $field; RemoveOutput = $true
+            }
+        }
+    }
+    $landingZoneCases += @(
+        @{
+            Name = 'space-missing-provider'; ObservedKinds = @('Space'); Kinds = @('Space')
+            FaultKind = 'Space'; Fault = 'providerConfigName'
+        }
+        @{
+            Name = 'network-missing-subnet'; ObservedKinds = @('Space', 'Network'); Kinds = @('Space', 'Network')
+            FaultKind = 'Network'; Fault = 'subnetID'
+        }
+    )
+    $landingZoneApi = Join-Path $stacks 'apis\landingzone'
+    $landingZoneObserved = Get-Content -LiteralPath (Join-Path $stacks 'tests\landingzone\observed-ready.yaml') -Raw
+    foreach ($case in $landingZoneCases) {
+        Write-Host "Rendering LandingZone $($case.Name)"
+        $public = $case.ContainsKey('Public')
+        $zoneName = if ($public) { 'production' } else { 'development' }
+        $exposure = if ($public) { 'public' } else { 'private' }
+        $size = if ($public) { 'large' } else { 'medium' }
+        $geo = if ($public) { 'true' } else { 'false' }
+        $observed = $landingZoneObserved
+        if ($public) {
+            $observed = $observed.Replace('development', 'production').
+                Replace('Development', 'Production').Replace('exposure: private', 'exposure: public')
+        }
+        $documents = [regex]::Split($observed, '(?m)^---\s*$')
+        $selected = foreach ($document in $documents) {
+            if ($document -notmatch '(?m)^kind:\s+(\S+)\s*$' -or $Matches[1] -notin $case.ObservedKinds) {
+                continue
+            }
+            if ($case.ContainsKey('FaultKind') -and $document -match "(?m)^kind: $($case.FaultKind)\s*$") {
+                $document = switch ($case.Fault) {
+                    'NotReady' { $document.Replace('status: "True"', 'status: "False"') }
+                    'NoCondition' { $document -replace '(?m)^  conditions:[^\r\n]*(\r?\n|$)', '' }
+                    default {
+                        if ($case.ContainsKey('RemoveOutput')) {
+                            $document -replace "(?m)^  $($case.Fault):[^\r\n]*(\r?\n|$)", ''
+                        }
+                        else {
+                            $document -replace "(?m)^(  $($case.Fault):)[^\r\n]*", '$1 ""'
+                        }
+                    }
+                }
+            }
+            $document
+        }
+        $observedPath = Join-Path $output 'landingzone-observed.yaml'
+        Set-Content -LiteralPath $observedPath -Value ($selected -join "---`n")
+        $renderPath = Join-Path $rendered "landingzone-$($case.Name).yaml"
+        $arguments = @(
+            'render', (Join-Path $stacks "examples\landingzone-$exposure.yaml")
+            (Join-Path $landingZoneApi 'composition.yaml'), $functions
+            "--crossplane-version=$crossplaneVersion"
+            "--xrd=$(Join-Path $landingZoneApi 'definition.yaml')"
+            '--include-full-xr'
+        )
+        if ($case.ObservedKinds.Count -gt 0) { $arguments += "--observed-resources=$observedPath" }
+        & crossplane @arguments > $renderPath
+        if ($LASTEXITCODE -ne 0) { throw "Rendering LandingZone $($case.Name) failed." }
+        $result = Get-Content -LiteralPath $renderPath -Raw
+        $xr = Get-RenderedResource $result 'LandingZone'
+        $ready = $xr -match '(?m)^    status: "True"\r?\n    type: Ready\s*$'
+        if ($ready -ne $case.ContainsKey('Ready')) {
+            throw "Unexpected LandingZone readiness for $($case.Name)."
+        }
+        $documents = [regex]::Split($result, '(?m)^---\s*$')
+        foreach ($document in $documents) {
+            if ($document -match '(?m)^kind:\s+(\S+)\s*$' -and $Matches[1] -notin ($landingZoneKinds + @('LandingZone', 'Usage'))) {
+                throw "Unexpected resource kind in LandingZone: $($Matches[1])."
+            }
+        }
+        foreach ($kind in $landingZoneKinds) {
+            Assert-RenderedKind $result $kind ($kind -in $case.Kinds)
+            if ($kind -notin $case.Kinds) { continue }
+            $child = Get-RenderedResource $result $kind
+            foreach ($setting in @("name: $zoneName", 'namespace: team-a', 'owner: team-a', "environment: $zoneName")) {
+                if ($child -notmatch "(?m)^  (?:  )?$([regex]::Escape($setting))\s*$") {
+                    throw "LandingZone $kind is missing metadata or tag '$setting'."
+                }
+            }
+            if ($child -notmatch "(?m)^  ownerReferences:\r?\n  - apiVersion: platform.example.org/v1alpha1\r?\n    blockOwnerDeletion: true\r?\n    controller: true\r?\n    kind: LandingZone\r?\n    name: $zoneName\s*$") {
+                throw "Expected LandingZone controller reference on $kind."
+            }
+            if ($child -match 'providerConfig|ClusterProviderConfig|compositionRef|credentials:') {
+                throw 'LandingZone must not pass provider plumbing to children.'
+            }
+            switch ($kind) {
+                Space {
+                    $displayName = if ($public) { 'Production' } else { 'Development' }
+                    Assert-RenderedSetting $child "displayName: $displayName"
+                    Assert-RenderedSetting $child "exposure: $exposure"
+                }
+                Network {
+                    Assert-RenderedSetting $child "space: $zoneName"
+                    Assert-RenderedSetting $child "size: $size"
+                }
+                Bucket {
+                    Assert-RenderedSetting $child "network: $zoneName"
+                    Assert-RenderedSetting $child "geoRedundant: $geo"
+                    $containers = @(if ($public) { 'incoming'; 'archive' } else { 'default' })
+                    if ([regex]::Matches($child, '(?m)^  - name:').Count -ne $containers.Count) {
+                        throw 'Unexpected LandingZone Bucket containers.'
+                    }
+                    foreach ($container in $containers) { Assert-RenderedSetting $child "name: $container" }
+                }
+                SecretStore { Assert-RenderedSetting $child "network: $zoneName" }
+            }
+        }
+        if (-not $case.ContainsKey('Ready')) { continue }
+        foreach ($setting in @(
+                "spaceName: $zoneName", "networkName: $zoneName"
+                'subscriptionID: 00000000-0000-4000-8000-000000000010'
+                "subnetID: /subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/network-$zoneName/providers/Microsoft.Network/virtualNetworks/network/subnets/default"
+                'accountName: st0000000000000000000001'
+                'blobEndpoint: https://st0000000000000000000001.blob.core.windows.net/'
+                'vaultName: kv0000000000000000000001'
+                'vaultURI: https://kv0000000000000000000001.vault.azure.net/'
+            )) {
+            Assert-RenderedSetting $xr $setting
+        }
+        $usages = @($documents | Where-Object { $_ -match '(?m)^kind: Usage\s*$' })
+        if ($usages.Count -ne 3) { throw "Expected three LandingZone Usages, found $($usages.Count)." }
+        foreach ($edge in @(@('Network', 'Space'), @('Bucket', 'Network'), @('SecretStore', 'Network'))) {
+            $usage = @($usages | Where-Object {
+                    $_ -match "(?m)^  by:\r?\n    apiVersion: platform.example.org/v1alpha1\r?\n    kind: $($edge[0])\r?\n    resourceRef:\r?\n      name: $zoneName\s*$" -and
+                    $_ -match "(?m)^  of:\r?\n    apiVersion: platform.example.org/v1alpha1\r?\n    kind: $($edge[1])\r?\n    resourceRef:\r?\n      name: $zoneName\s*$"
+                })
+            if ($usage.Count -ne 1) { throw "Missing LandingZone dependency $($edge -join ' -> ')." }
+            if ($usage[0] -notmatch '(?m)^apiVersion: protection.crossplane.io/v1beta1\s*$') {
+                throw 'Expected a namespaced v2 Usage.'
+            }
+            Assert-RenderedSetting $usage[0] 'replayDeletion: true'
+        }
+
+        foreach ($kind in $landingZoneKinds) {
+            Write-Host "Rendering LandingZone $exposure child $kind"
+            $apiName = $kind.ToLowerInvariant()
+            $project = if ($kind -in @('Space', 'Network')) { $foundation } else { $services }
+            $childApi = Join-Path $project "apis\$apiName"
+            $fixture = Join-Path $project "tests\$apiName"
+            $child = Get-RenderedResource $result $kind
+            $childStatus = [regex]::Match((Get-RenderedResource $observed $kind), '(?ms)^status:.*$')
+            if (-not $childStatus.Success) { throw "Missing observed LandingZone child status for $kind." }
+            $child += "`n$($childStatus.Value)"
+            $childPath = Join-Path $output 'landingzone-child.yaml'
+            Set-Content -LiteralPath $childPath -Value $child
+            $environment = Get-RenderedResource (Get-Content -LiteralPath (Join-Path $fixture 'environment.yaml') -Raw) 'EnvironmentConfig'
+            $required = @($environment)
+            foreach ($dependency in @('Space', 'Network')) {
+                if ($dependency -eq $kind) { continue }
+                $required += Get-RenderedResource $observed $dependency
+            }
+            $requiredPath = Join-Path $output 'landingzone-child-required.yaml'
+            Set-Content -LiteralPath $requiredPath -Value ($required -join "---`n")
+            $childObserved = (Get-Content -LiteralPath (Join-Path $fixture 'observed-ready.yaml') -Raw).
+                Replace('private-network', $zoneName).Replace('reports', $zoneName).Replace('app-secrets', $zoneName).
+                Replace('00000000-0000-4000-8000-000000000008', '00000000-0000-4000-8000-000000000010').
+                Replace('subscriptionId: "00000000-0000-4000-8000-000000000001"', 'subscriptionId: "00000000-0000-4000-8000-000000000010"')
+            $seed = "00000000-0000-4000-8000-000000000010/team-a/$zoneName"
+            $hash = [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes($seed))).ToLowerInvariant().Substring(0, 22)
+            $childObserved = $childObserved -replace 'st[0-9a-f]{22}', "st$hash" -replace 'kv[0-9a-f]{22}', "kv$hash"
+            $childObservedPath = Join-Path $output 'landingzone-child-observed.yaml'
+            Set-Content -LiteralPath $childObservedPath -Value $childObserved
+            $childRenderPath = Join-Path $rendered "landingzone-$exposure-$apiName.yaml"
+            & crossplane render $childPath (Join-Path $childApi 'composition.yaml') $functions `
+                "--crossplane-version=$crossplaneVersion" "--xrd=$(Join-Path $childApi 'definition.yaml')" `
+                "--required-resources=$requiredPath" "--observed-resources=$childObservedPath" `
+                --include-full-xr > $childRenderPath
+            if ($LASTEXITCODE -ne 0) { throw "Rendering LandingZone child $kind failed." }
+            $childResult = Get-Content -LiteralPath $childRenderPath -Raw
+            switch ($kind) {
+                Space {
+                    Assert-RenderedSetting $childResult "managementGroupId: /providers/Microsoft.Management/managementGroups/$(if ($public) { 'online' } else { 'corp' })"
+                }
+                Network {
+                    Assert-RenderedKind $childResult 'VirtualHubConnection' (-not $public)
+                    Assert-RenderedSetting $childResult "numberOfIpAddresses: `"$(if ($public) { '512' } else { '256' })`""
+                }
+                Bucket {
+                    Assert-RenderedSetting $childResult "accountReplicationType: $(if ($public) { 'GZRS' } else { 'ZRS' })"
+                    Assert-RenderedSetting $childResult "subnetId: /subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/network-$zoneName/providers/Microsoft.Network/virtualNetworks/network/subnets/default"
+                    foreach ($container in $containers) { Assert-RenderedSetting $childResult "crossplane.io/external-name: $container" }
+                }
+                SecretStore {
+                    Assert-RenderedSetting $childResult "subnetId: /subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/network-$zoneName/providers/Microsoft.Network/virtualNetworks/network/subnets/default"
+                }
+            }
+            if ($kind -in @('Bucket', 'SecretStore')) {
+                $configs = [regex]::Matches($childResult, '(?m)^    kind: ProviderConfig\r?\n    name: (\S+)\s*$')
+                if ($configs.Count -lt 3 -or @($configs | Where-Object { $_.Groups[1].Value -ne $zoneName }).Count -gt 0) {
+                    throw "LandingZone $kind must use its Space's ProviderConfig."
+                }
+                Assert-RenderedTags $childResult @('ResourceGroup') @{ owner = 'platform'; 'managed-by' = 'crossplane'; environment = $zoneName }
+            }
+        }
+    }
+
     foreach ($case in $dependencies) {
         Write-Host "Checking $($case.Api) dependency: $($case.Name)"
         $fixture = Join-Path $services "tests\$($case.Api)"
@@ -578,10 +805,12 @@ try {
         (Join-Path $services 'apis\bucket\definition.yaml')
         (Join-Path $services 'apis\secretstore\definition.yaml')
         (Join-Path $services 'apis\app\definition.yaml')
+        (Join-Path $landingZoneApi 'definition.yaml')
     ) -join ','
     $resources = @(
         (Join-Path $foundation 'examples')
         (Join-Path $services 'examples')
+        (Join-Path $stacks 'examples')
         $rendered
     ) -join ','
     & crossplane resource validate $extensions $resources `
@@ -704,6 +933,79 @@ spec:
         }
         if (-not $case.Valid -and (Get-Content -LiteralPath $validationPath -Raw) -notmatch $case.Field) {
             throw "Expected App $($case.Field) validation error: $(Get-Content -LiteralPath $validationPath -Raw)"
+        }
+    }
+
+    Write-Host 'Checking LandingZone input boundaries'
+    $landingZoneInputs = @(
+        @{ Name = 'defaults'; Valid = $true }
+        @{ Name = 'missing-spec'; Remove = 'spec'; Valid = $false; Field = 'spec' }
+        @{ Name = 'missing-display-name'; Remove = 'displayName'; Valid = $false; Field = 'displayName' }
+        @{ Name = 'missing-exposure'; Remove = 'exposure'; Valid = $false; Field = 'exposure' }
+        @{ Name = 'invalid-exposure'; Exposure = 'internal'; Valid = $false; Field = 'exposure' }
+        @{ Name = 'small-network'; Extra = '  networkSize: small'; Valid = $true }
+        @{ Name = 'invalid-size'; Extra = '  networkSize: enormous'; Valid = $false; Field = 'networkSize' }
+        @{ Name = 'invalid-geo'; Extra = '  geoRedundant: "yes"'; Valid = $false; Field = 'geoRedundant' }
+        @{ Name = 'minimum-name'; ResourceName = 'a'; Valid = $true }
+        @{ Name = 'maximum-name'; ResourceName = ('a' * 63); Valid = $true }
+        @{ Name = 'long-name'; ResourceName = ('a' * 64); Valid = $false; Field = 'name' }
+        @{ Name = 'short-display-name'; DisplayName = 'ab'; Valid = $false; Field = 'displayName' }
+        @{ Name = 'display-name-whitespace'; DisplayName = 'a b'; Valid = $false; Field = 'displayName' }
+        @{ Name = 'long-display-name'; DisplayName = ('a' * 65); Valid = $false; Field = 'displayName' }
+        @{ Name = 'invalid-container'; Extra = "  containers:`n    - name: bad--name"; Valid = $false; Field = 'containers' }
+        @{ Name = 'duplicate-container'; Extra = "  containers:`n    - name: data`n    - name: data"; Valid = $false; Field = 'containers' }
+    )
+    foreach ($count in @(0, 1, 20, 21)) {
+        $entries = $(for ($index = 0; $index -lt $count; $index++) { "    - name: container-$index" }) -join "`n"
+        $extra = if ($count -eq 0) { '  containers: []' } else { "  containers:`n$entries" }
+        $landingZoneInputs += @{ Name = "$count-containers"; Extra = $extra; Valid = $count -in @(1, 20); Field = 'containers' }
+    }
+    foreach ($key in @(('a' * 128), ('a' * 129), 'invalid/key', '')) {
+        $landingZoneInputs += @{
+            Name = "tag-key-$($key.Length)"; Extra = "  tags:`n    `"$key`": value"
+            Valid = $key.Length -eq 128; Field = 'tags'
+        }
+    }
+    foreach ($count in @(40, 41)) {
+        $entries = $(for ($index = 0; $index -lt $count; $index++) { "    tag-$index`: value" }) -join "`n"
+        $landingZoneInputs += @{ Name = "$count-tags"; Extra = "  tags:`n$entries"; Valid = $count -eq 40; Field = 'tags' }
+    }
+    foreach ($length in @(256, 257)) {
+        $landingZoneInputs += @{
+            Name = "tag-value-$length"; Extra = "  tags:`n    owner: $('a' * $length)"
+            Valid = $length -eq 256; Field = 'tags'
+        }
+    }
+    foreach ($case in $landingZoneInputs) {
+        $name = if ($case.ContainsKey('ResourceName')) { $case.ResourceName } else { 'input-boundaries' }
+        $displayName = if ($case.ContainsKey('DisplayName')) { $case.DisplayName } else { 'Development' }
+        $exposure = if ($case.ContainsKey('Exposure')) { $case.Exposure } else { 'private' }
+        $xr = @"
+apiVersion: platform.example.org/v1alpha1
+kind: LandingZone
+metadata:
+  name: $name
+  namespace: team-a
+spec:
+  displayName: "$displayName"
+  exposure: $exposure
+"@
+        if ($case.ContainsKey('Extra')) { $xr += "`n$($case.Extra)`n" }
+        if ($case.ContainsKey('Remove')) {
+            $xr = if ($case.Remove -eq 'spec') { ($xr -split '(?m)^spec:')[0] }
+            else { $xr -replace "(?m)^  $($case.Remove):[^\r\n]*(\r?\n|$)", '' }
+        }
+        $xrPath = Join-Path $output 'landingzone-input.yaml'
+        $validationPath = Join-Path $output 'landingzone-validation.txt'
+        Set-Content -LiteralPath $xrPath -Value $xr
+        & crossplane resource validate (Join-Path $landingZoneApi 'definition.yaml') `
+            $xrPath "--crossplane-image=xpkg.crossplane.io/crossplane/crossplane:$crossplaneVersion" `
+            --error-on-missing-schemas > $validationPath 2>&1
+        if (($LASTEXITCODE -eq 0) -ne $case.Valid) {
+            throw "Unexpected LandingZone validation result for $($case.Name): $(Get-Content -LiteralPath $validationPath -Raw)"
+        }
+        if (-not $case.Valid -and (Get-Content -LiteralPath $validationPath -Raw) -notmatch $case.Field) {
+            throw "Expected LandingZone $($case.Field) validation error: $(Get-Content -LiteralPath $validationPath -Raw)"
         }
     }
 

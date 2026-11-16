@@ -156,9 +156,9 @@ pwsh -NoProfile -File ./tests/test.ps1
 ```
 
 The [test runner](tests/test.ps1) runs with PowerShell 7 on Windows, Linux and macOS.
-It renders all Space, Network, Bucket and SecretStore examples plus ready-state
-fixtures, then validates examples and output against the XRDs, pinned providers
-and Crossplane schemas.
+It renders all Space, Network, Bucket, SecretStore and App examples plus
+ready-state fixtures, then validates examples and output against the XRDs,
+pinned providers and Crossplane schemas.
 Missing schemas and failed checks return a nonzero exit code.
 Temporary output is removed; downloaded provider schemas and Docker images are cached.
 Each run fetches the namespaced Usage CRD from the pinned Crossplane release on GitHub;
@@ -391,6 +391,66 @@ crossplane render projects/services/examples/secretstore.yaml \
 Without `--observed-resources` only the Network Usage is created; the rest
 follows once it is ready. The test runner also checks dependency failures.
 Rendering does not verify Azure permissions, DNS, recovery or deletion.
+
+### App
+
+An [App](projects/services/apis/app/definition.yaml) runs one public container
+image in its own Container Apps Consumption environment. It selects a Network
+in the same namespace, uses that Network's Space ProviderConfig, and owns a
+resource group named `app-<metadata.name>`, the environment and the app.
+
+Inputs are `network`, `image`, `targetPort` (default 8080), `exposure` (default
+private) and optional `tags`. Network and exposure are immutable. Use an explicit
+image version tag other than `latest` or a SHA-256 digest; digests are preferred
+because tags can move. Platform-owned tags override matching user tags.
+Azure app names are `ca` plus a hash of subscription, namespace and XR name.
+
+Private exposure disables environment public access and creates a private
+endpoint in the selected Network subnet. Public exposure enables internet
+ingress and creates no private endpoint; it is independent of Space's governance
+exposure. App-level ingress is external in both modes: it publishes the app at
+the environment boundary, not necessarily on the internet. HTTPS-only ingress,
+single revisions, 0.25 vCPU / 0.5Gi, 1-3 replicas and HTTP scaling at 50 concurrent
+requests are fixed. The application must authenticate its callers.
+
+Every App has a system-assigned identity, published in `status.principalID`.
+Grant data-access roles externally; the API creates no role assignments.
+Private endpoints provide **inbound access only**. There is no VNet injection,
+so this App cannot yet reach private Bucket or SecretStore endpoints.
+There are no environment variables, secrets, private registry credentials or
+custom domains.
+
+Private DNS must be supplied by platform policy or setup for
+`privatelink.<region>.azurecontainerapps.io`. No persisted log sink is configured;
+only live log streaming is available until the platform supplies logging.
+Dedicated environments and private endpoints carry additional costs.
+Deleting an App deletes its infrastructure and identity. Sequenced v2 Usages
+keep the environment and selected Network until dependent cleanup completes.
+Missing dependencies or required outputs fail reconciliation without dropping
+existing composed resources.
+
+Try the [private](projects/services/examples/app.yaml) or
+[public](projects/services/examples/app-public.yaml) example. Status publishes
+the app and environment IDs, domain, FQDN, HTTPS URL, identity principal and
+private endpoint ID/IP when present.
+
+#### Checking App locally
+
+```shell
+crossplane render projects/services/examples/app.yaml \
+  projects/services/apis/app/composition.yaml crossplane/functions.yaml \
+  --crossplane-version=v2.4.3 \
+  --xrd=projects/services/apis/app/definition.yaml \
+  --required-resources=projects/services/tests/app/environment.yaml \
+  --observed-resources=projects/services/tests/app/observed-ready.yaml \
+  --include-full-xr
+```
+
+Without observations only the Network Usage is created. The test runner covers
+staged creation, public/private graphs, dependency failures, input limits and
+runtime/status outputs. It validates against the pinned provider CRDs and XRD.
+These checks do not verify Azure connectivity, DNS, identity grants, image pulls,
+autoscaling, deletion or update-time immutability enforcement.
 
 ## License
 

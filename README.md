@@ -21,7 +21,7 @@ APIs:
 
 - foundation: `Space` (subscription, management group, identity), `Network` (VNet and hub connection)
 - services: `Bucket` (storage account), `SecretStore` (Key Vault), `App` (container app)
-- stacks: `LandingZone` (a `Space` and a `Network`)
+- stacks: `LandingZone` (a `Space`, `Network`, `Bucket` and `SecretStore`)
 
 Compositions only use standard functions (environment-configs, patch-and-transform, kro, go-templating, sequencer, auto-ready). There are no custom functions.
 
@@ -156,8 +156,8 @@ pwsh -NoProfile -File ./tests/test.ps1
 ```
 
 The [test runner](tests/test.ps1) runs with PowerShell 7 on Windows, Linux and macOS.
-It renders all Space, Network, Bucket, SecretStore and App examples plus
-ready-state fixtures, then validates examples and output against the XRDs,
+It renders all Space, Network, Bucket, SecretStore, App and LandingZone examples
+plus ready-state fixtures, then validates examples and output against the XRDs,
 pinned providers and Crossplane schemas.
 Missing schemas and failed checks return a nonzero exit code.
 Temporary output is removed; downloaded provider schemas and Docker images are cached.
@@ -451,6 +451,73 @@ staged creation, public/private graphs, dependency failures, input limits and
 runtime/status outputs. It validates against the pinned provider CRDs and XRD.
 These checks do not verify Azure connectivity, DNS, identity grants, image pulls,
 autoscaling, deletion or update-time immutability enforcement.
+
+### LandingZone
+
+A [LandingZone](projects/stacks/apis/landingzone/definition.yaml) bundles one
+Space, Network, Bucket and SecretStore. All four child XRs have the LandingZone's
+name and namespace; do not create standalone XRs of those kinds with the same
+name there. The stack only composes platform APIs, never Azure resources.
+
+Inputs are `displayName`, `exposure` and these optional fields:
+
+- `networkSize`: `small`, `medium` (default) or `large`.
+- `containers`: 1-20 named blob containers. Omit it for one named `default`;
+  an empty list is invalid. Removing a container deletes its data.
+- `geoRedundant`: false (default) uses ZRS; true uses GZRS.
+- `tags`: up to 40 entries, with keys up to 128 characters and values up to 256.
+  Tags go to all four children; each child applies platform-owned tag precedence.
+
+Exposure, networkSize and geoRedundant are immutable. Exposure selects corp
+(`private`) or online (`public`) subscription governance; it does not change
+Bucket or SecretStore network access. Region, identities and other platform
+settings remain in EnvironmentConfig.
+
+Space becomes ready first, then Network, then Bucket and SecretStore in
+parallel. LandingZone is ready only when all four children are ready and have
+published the required outputs. Status exposes `spaceName`, `networkName`,
+`subscriptionID`, `subnetID`, `accountName`, `blobEndpoint`, `vaultName` and
+`vaultURI`. Additional services can select the owned Network by that name.
+
+Install the foundation and services APIs and configure the platform identity,
+EnvironmentConfig and private DNS before use. Bucket still requires provider
+data-plane reachability and has a public endpoint; SecretStore is private.
+The stack adds neither data-access grants nor DNS records. An App can select
+this Network, but its current private-outbound limitation still applies.
+
+Try the [private](projects/stacks/examples/landingzone-private.yaml) example
+with defaults or the [public](projects/stacks/examples/landingzone-public.yaml)
+example with custom containers and geo redundancy.
+
+Delete with foreground cascading deletion so sequenced v2 Usages preserve
+the Network and Space identity until service cleanup completes:
+
+```shell
+kubectl delete landingzone development -n team-a --cascade=foreground
+```
+
+Deletion **deletes the Bucket and its data** and cancels the subscription.
+SecretStore's purge-protected vault stays recoverable for 90 days. Management
+group associations and resource-provider registrations remain for the
+subscription's lifetime, as documented by Space.
+
+#### Checking LandingZone locally
+
+```shell
+crossplane render projects/stacks/examples/landingzone-private.yaml \
+  projects/stacks/apis/landingzone/composition.yaml crossplane/functions.yaml \
+  --crossplane-version=v2.4.3 \
+  --xrd=projects/stacks/apis/landingzone/definition.yaml \
+  --observed-resources=projects/stacks/tests/landingzone/observed-ready.yaml \
+  --include-full-xr
+```
+
+Without observations only Space is created. The test runner covers staged
+creation, defaults and overrides, missing outputs, readiness regression,
+dependency Usages and input limits. It also renders the emitted child XRs
+against their compositions and validates the output. These local checks do
+not verify API-server ownership conflicts, update-time immutability, actual
+deletion order, private DNS or Azure behavior.
 
 ## License
 

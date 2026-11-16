@@ -1,0 +1,110 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: landingzones.azure.platform.example.org
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: LandingZone
+  mode: Pipeline
+  pipeline:
+    - step: compose
+      functionRef: {name: function-patch-and-transform}
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        patchSets:
+          - name: metadata-and-tags
+            patches:
+              - {type: FromCompositeFieldPath, fromFieldPath: metadata.name, toFieldPath: metadata.name}
+              - {type: FromCompositeFieldPath, fromFieldPath: metadata.namespace, toFieldPath: metadata.namespace}
+              - {type: FromCompositeFieldPath, fromFieldPath: spec.tags, toFieldPath: spec.tags}
+        resources:
+          - name: space
+            base:
+              apiVersion: platform.example.org/v1alpha1
+              kind: Space
+            patches:
+              - {type: PatchSet, patchSetName: metadata-and-tags}
+              - {type: FromCompositeFieldPath, fromFieldPath: spec.displayName, toFieldPath: spec.displayName}
+              - {type: FromCompositeFieldPath, fromFieldPath: spec.exposure, toFieldPath: spec.exposure}
+              - {type: ToCompositeFieldPath, fromFieldPath: metadata.name, toFieldPath: status.spaceName}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.subscriptionID, toFieldPath: status.subscriptionID}
+          - name: network
+            base:
+              apiVersion: platform.example.org/v1alpha1
+              kind: Network
+              spec:
+                size: medium
+            patches:
+              - {type: PatchSet, patchSetName: metadata-and-tags}
+              - {type: FromCompositeFieldPath, fromFieldPath: metadata.name, toFieldPath: spec.space}
+              - {type: FromCompositeFieldPath, fromFieldPath: spec.networkSize, toFieldPath: spec.size}
+              - {type: ToCompositeFieldPath, fromFieldPath: metadata.name, toFieldPath: status.networkName}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.subnetID, toFieldPath: status.subnetID}
+          - name: bucket
+            base:
+              apiVersion: platform.example.org/v1alpha1
+              kind: Bucket
+              spec:
+                geoRedundant: false
+                containers: [{name: default}]
+            patches:
+              - {type: PatchSet, patchSetName: metadata-and-tags}
+              - {type: FromCompositeFieldPath, fromFieldPath: metadata.name, toFieldPath: spec.network}
+              - {type: FromCompositeFieldPath, fromFieldPath: spec.containers, toFieldPath: spec.containers}
+              - {type: FromCompositeFieldPath, fromFieldPath: spec.geoRedundant, toFieldPath: spec.geoRedundant}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.accountName, toFieldPath: status.accountName}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.blobEndpoint, toFieldPath: status.blobEndpoint}
+          - name: secretstore
+            base:
+              apiVersion: platform.example.org/v1alpha1
+              kind: SecretStore
+            patches:
+              - {type: PatchSet, patchSetName: metadata-and-tags}
+              - {type: FromCompositeFieldPath, fromFieldPath: metadata.name, toFieldPath: spec.network}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.vaultName, toFieldPath: status.vaultName}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.vaultURI, toFieldPath: status.vaultURI}
+    # P&T's NonEmpty only checks field existence. Explicit False also prevents
+    # auto-ready from overriding a failed output check with the child's Ready condition.
+    - step: readiness
+      functionRef: {name: function-go-templating}
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{- $outputs := dict
+              "space" (list "subscriptionID" "providerConfigName")
+              "network" (list "subnetID")
+              "bucket" (list "accountName" "blobEndpoint")
+              "secretstore" (list "vaultName" "vaultURI") }}
+            {{- range $name, $fields := $outputs }}
+            {{- $observed := getComposedResource $ $name | default dict }}
+            {{- $ready := eq (getResourceCondition "Ready" $observed).Status "True" }}
+            {{- range $field := $fields }}
+            {{- $ready = and $ready (not (empty (dig "status" $field "" $observed))) }}
+            {{- end }}
+            {{- $resource := (index $.desired.resources $name).resource }}
+            {{- $annotations := get $resource.metadata "annotations" | default dict }}
+            {{- $_ := set $annotations "gotemplating.fn.crossplane.io/composition-resource-name" $name }}
+            {{- $_ := set $annotations "gotemplating.fn.crossplane.io/ready" (ternary "True" "False" $ready) }}
+            {{- $_ := set $resource.metadata "annotations" $annotations }}
+            ---
+            {{ $resource | toYaml }}
+            {{- end }}
+    - step: sequence
+      functionRef: {name: function-sequencer}
+      input:
+        apiVersion: sequencer.fn.crossplane.io/v1beta1
+        kind: Input
+        enableDeletionSequencing: true
+        usageVersion: v2
+        replayDeletion: true
+        resetCompositeReadiness: true
+        rules:
+          - sequence: [space, network, bucket]
+          - sequence: [network, secretstore]
+    - step: auto-ready
+      functionRef: {name: function-auto-ready}

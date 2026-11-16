@@ -1,0 +1,142 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: landingzones.platform.example.org
+spec:
+  scope: Namespaced
+  group: platform.example.org
+  names:
+    kind: LandingZone
+    plural: landingzones
+  defaultCompositionRef:
+    name: landingzones.azure.platform.example.org
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      additionalPrinterColumns:
+        - name: Exposure
+          type: string
+          jsonPath: .spec.exposure
+        - name: Subscription
+          type: string
+          jsonPath: .status.subscriptionID
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          description: >-
+            An Azure landing zone composed of a Space, Network, Bucket and
+            SecretStore with this name in this namespace. Exposure selects
+            corp or online governance, not public service access.
+            Delete with foreground cascading deletion to clean up services
+            before the network and subscription identity. Deletion cancels
+            the subscription and deletes the Bucket and its data.
+            The purge-protected SecretStore remains recoverable for 90 days;
+            management-group associations and resource-provider registrations
+            remain for the subscription's lifetime.
+          x-kubernetes-validations:
+            - rule: size(self.metadata.name) <= 63
+              message: LandingZone name must be at most 63 characters.
+          properties:
+            spec:
+              type: object
+              required: [displayName, exposure]
+              properties:
+                displayName:
+                  type: string
+                  description: Display name of the Space's Azure subscription.
+                  minLength: 3
+                  maxLength: 64
+                  pattern: '^\S+$'
+                exposure:
+                  type: string
+                  description: >-
+                    private selects corp; public selects online.
+                    Governance placement, not service access. Immutable.
+                  enum: [private, public]
+                  x-kubernetes-validations:
+                    - rule: self == oldSelf
+                      message: Exposure cannot change; create a new LandingZone.
+                networkSize:
+                  type: string
+                  description: IPAM allocation size. Immutable; small=/25, medium=/24, large=/23.
+                  enum: [small, medium, large]
+                  default: medium
+                  x-kubernetes-validations:
+                    - rule: self == oldSelf
+                      message: Network size cannot change; create a new LandingZone.
+                containers:
+                  type: array
+                  description: >-
+                    Private blob containers, 1 to 20. Defaults to one named
+                    default when omitted; an empty list is invalid.
+                    Removing an entry deletes that container and its data.
+                  default: [{name: default}]
+                  minItems: 1
+                  maxItems: 20
+                  x-kubernetes-list-type: map
+                  x-kubernetes-list-map-keys: [name]
+                  x-kubernetes-validations:
+                    - rule: self.all(c, self.exists_one(other, other.name == c.name))
+                      message: Container names must be unique.
+                  items:
+                    type: object
+                    required: [name]
+                    properties:
+                      name:
+                        type: string
+                        description: Container name.
+                        minLength: 3
+                        maxLength: 63
+                        pattern: '^[a-z0-9]([a-z0-9]|-[a-z0-9])*$'
+                geoRedundant:
+                  type: boolean
+                  description: >-
+                    false uses ZRS within one region; true uses GZRS with
+                    asynchronous copies in the paired region. Immutable.
+                  default: false
+                  x-kubernetes-validations:
+                    - rule: self == oldSelf
+                      message: geoRedundant cannot change; create a new LandingZone.
+                tags:
+                  type: object
+                  description: >-
+                    Up to 40 user tags forwarded to all four children.
+                    Platform-owned tags take precedence. Keys follow Bucket's
+                    stricter 128-character limit.
+                  default: {}
+                  maxProperties: 40
+                  additionalProperties:
+                    type: string
+                    maxLength: 256
+                  x-kubernetes-validations:
+                    - rule: "self.all(k, size(k) > 0 && size(k) <= 128 && !k.matches('[<>%&\\\\\\\\?/]+'))"
+                      message: Tag keys must be 1-128 characters and cannot contain < > % & \ ? /.
+            status:
+              type: object
+              properties:
+                spaceName:
+                  type: string
+                  description: Owned Space in this namespace.
+                networkName:
+                  type: string
+                  description: Owned Network in this namespace; select it when creating an App.
+                subscriptionID:
+                  type: string
+                  description: Azure subscription ID published by Space.
+                subnetID:
+                  type: string
+                  description: Subnet Azure resource ID published by Network.
+                accountName:
+                  type: string
+                  description: Storage account name published by Bucket.
+                blobEndpoint:
+                  type: string
+                  description: Blob service endpoint published by Bucket.
+                vaultName:
+                  type: string
+                  description: Vault name published by SecretStore.
+                vaultURI:
+                  type: string
+                  description: Vault URI published by SecretStore; requires private DNS and network access.

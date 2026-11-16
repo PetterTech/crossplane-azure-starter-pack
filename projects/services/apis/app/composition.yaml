@@ -99,7 +99,7 @@ spec:
                   name: app
                   isManualConnection: false
                   privateConnectionResourceId: {{ $environmentID | quote }}
-                  subresourceNames: [managedEnvironment]
+                  subresourceNames: [managedEnvironments]
                 tags: {{ mergeOverwrite (deepCopy ($xr.spec.tags | default dict)) ($env.platformTags | default dict) | toJson }}
             {{- end }}
             {{- $endpointID := dig "status" "atProvider" "id" "" $endpoint }}

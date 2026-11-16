@@ -1,0 +1,61 @@
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: hello-network-usage
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: network-usage}
+---
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceGroup
+metadata:
+  name: hello-group
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: resource-group}
+status:
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: containerapp.azure.m.upbound.io/v1beta1
+kind: Environment
+metadata:
+  name: hello-environment
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: environment
+    crossplane.io/external-name: cacc58deefe15e43489e5b81-env
+status:
+  atProvider:
+    id: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/app-hello/providers/Microsoft.App/managedEnvironments/cacc58deefe15e43489e5b81-env"
+    defaultDomain: "example.westeurope.azurecontainerapps.io"
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: containerapp.azure.m.upbound.io/v1beta1
+kind: ContainerApp
+metadata:
+  name: hello-app
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: app
+    crossplane.io/external-name: cacc58deefe15e43489e5b81
+status:
+  atProvider:
+    id: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/app-hello/providers/Microsoft.App/containerApps/cacc58deefe15e43489e5b81"
+    ingress:
+      fqdn: "cacc58deefe15e43489e5b81.example.westeurope.azurecontainerapps.io"
+    identity:
+      principalId: "00000000-0000-4000-8000-000000000020"
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: PrivateEndpoint
+metadata:
+  name: hello-private-endpoint
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: private-endpoint
+    crossplane.io/external-name: cacc58deefe15e43489e5b81-env-pe
+status:
+  atProvider:
+    id: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/app-hello/providers/Microsoft.Network/privateEndpoints/cacc58deefe15e43489e5b81-env-pe"
+    privateServiceConnection:
+      privateIpAddress: "10.0.0.4"
+  conditions: [{type: Ready, status: "True"}]

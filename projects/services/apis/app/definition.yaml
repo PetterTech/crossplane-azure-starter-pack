@@ -1,0 +1,127 @@
+apiVersion: apiextensions.crossplane.io/v2
+kind: CompositeResourceDefinition
+metadata:
+  name: apps.platform.example.org
+spec:
+  scope: Namespaced
+  group: platform.example.org
+  names:
+    kind: App
+    plural: apps
+  defaultCompositionRef:
+    name: apps.azure.platform.example.org
+  versions:
+    - name: v1alpha1
+      served: true
+      referenceable: true
+      additionalPrinterColumns:
+        - name: Network
+          type: string
+          jsonPath: .spec.network
+        - name: Exposure
+          type: string
+          jsonPath: .spec.exposure
+        - name: URL
+          type: string
+          jsonPath: .status.url
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          description: >-
+            An HTTPS container app in a Network's Space, with its own resource
+            group, Consumption environment and system-assigned identity.
+            Private exposure adds an inbound private endpoint, not private
+            outbound connectivity. Private DNS and persisted logging are
+            platform prerequisites. This API creates no data-access grants.
+            Deleting an App deletes its infrastructure and application identity.
+          x-kubernetes-validations:
+            - rule: size(self.metadata.name) <= 63
+              message: App name must be at most 63 characters.
+          properties:
+            spec:
+              type: object
+              required: [network, image]
+              properties:
+                network:
+                  type: string
+                  description: >-
+                    Name of a Network in this namespace. The App uses its Space
+                    identity and, for private ingress, its subnet. Immutable.
+                  minLength: 1
+                  maxLength: 63
+                  pattern: '^[a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*$'
+                  x-kubernetes-validations:
+                    - rule: self == oldSelf
+                      message: Network cannot change; create a new App.
+                image:
+                  type: string
+                  description: >-
+                    Public container image serving HTTP on targetPort. Use an
+                    explicit version tag other than latest or a SHA-256 digest
+                    (preferred). Updating it creates a new revision.
+                    Private registry credentials are not supported.
+                  minLength: 3
+                  maxLength: 255
+                  pattern: '^[a-z0-9][a-zA-Z0-9._:/@-]*[a-zA-Z0-9]$'
+                  x-kubernetes-validations:
+                    - rule: "!self.endsWith(':latest')"
+                      message: Image must not use latest; pin a version tag or digest.
+                    - rule: "self.contains('@') ? self.matches('^[^@]+@sha256:[a-f0-9]{64}$') : self.split('/')[size(self.split('/')) - 1].matches('^[^:]+:[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$')"
+                      message: Image must have an explicit version tag or a valid SHA-256 digest.
+                targetPort:
+                  type: integer
+                  description: HTTP port the container listens on.
+                  minimum: 1
+                  maximum: 65535
+                  default: 8080
+                exposure:
+                  type: string
+                  description: >-
+                    Private (default) accepts ingress through a private endpoint.
+                    Public accepts internet ingress. Independent of the Space's
+                    governance exposure. The application authenticates callers.
+                    Immutable.
+                  enum: [private, public]
+                  default: private
+                  x-kubernetes-validations:
+                    - rule: self == oldSelf
+                      message: Exposure cannot change; create a new App.
+                tags:
+                  type: object
+                  description: Up to 40 user tags. Platform-owned tags take precedence.
+                  default: {}
+                  maxProperties: 40
+                  additionalProperties:
+                    type: string
+                    maxLength: 256
+                  x-kubernetes-validations:
+                    - rule: "self.all(k, size(k) > 0 && size(k) <= 512 && !k.matches('[<>%&\\\\\\\\?/]+'))"
+                      message: Tag keys must be 1-512 characters and cannot contain < > % & \ ? /.
+            status:
+              type: object
+              properties:
+                appName:
+                  type: string
+                  description: Stable Azure container app name.
+                resourceID:
+                  type: string
+                  description: Container app Azure resource ID.
+                environmentID:
+                  type: string
+                  description: Container Apps environment Azure resource ID.
+                environmentDefaultDomain:
+                  type: string
+                  description: Environment domain; private exposure requires private DNS.
+                fqdn:
+                  type: string
+                url:
+                  type: string
+                  description: HTTPS URL; private exposure requires private network access.
+                principalID:
+                  type: string
+                  description: Application identity principal ID; grant data-access roles externally.
+                privateEndpointID:
+                  type: string
+                privateEndpointIPAddress:
+                  type: string

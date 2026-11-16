@@ -461,7 +461,7 @@ try {
                     foreach ($setting in @(
                             'subnetId: /subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/network-private-network/providers/Microsoft.Network/virtualNetworks/network/subnets/default'
                             "privateConnectionResourceId: /subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/app-$name/providers/Microsoft.App/managedEnvironments/$appName-env"
-                            'isManualConnection: false', '- managedEnvironment'
+                            'isManualConnection: false', '- managedEnvironments'
                         )) {
                         Assert-RenderedSetting $endpoint $setting
                     }

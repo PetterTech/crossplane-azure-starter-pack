@@ -83,8 +83,8 @@ function Get-K8s([string]$Resource, [string]$Name, [string]$Ns) {
 function Test-K8sExists([string]$Resource, [string]$Name, [string]$Ns) {
     $arguments = @('get', $Resource, $Name, '--ignore-not-found', '-o', 'name')
     if ($Ns) { $arguments += @('-n', $Ns) }
-    $result = Invoke-ToolResult kubectl $arguments
-    return $result.ExitCode -eq 0 -and $result.Stdout.Trim() -ne ''
+    $output = Invoke-Tool kubectl $arguments
+    return $output.Trim() -ne ''
 }
 
 function Get-K8sOrNull([string]$Resource, [string]$Name, [string]$Ns) {

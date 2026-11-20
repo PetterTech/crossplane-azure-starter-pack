@@ -718,7 +718,8 @@ spec:
     }
 
     'delete' {
-        foreach ($name in $apps.Keys) {
+        $installedApps = if (Test-K8sExists xrd apps.platform.example.org '') { $apps.Keys } else { @() }
+        foreach ($name in $installedApps) {
             if (-not (Test-K8sExists app $name $Namespace)) { continue }
             Write-Step "Deleting App $Namespace/$name"
             $app = Get-K8s app $name $Namespace

@@ -76,6 +76,48 @@ function Assert-RenderedSetting {
     }
 }
 
+function Assert-TagInputValidation {
+    param(
+        [string]$Definition,
+        [string]$Kind,
+        [string]$Spec,
+        [string]$CaseName,
+        [AllowNull()][object]$TagEntries,
+        [bool]$ExpectedValid,
+        [string]$OutputPath,
+        [string]$CrossplaneVersion
+    )
+
+    $name = "tag-validation-$($Kind.ToLowerInvariant())-$CaseName"
+    $tags = if ($null -eq $TagEntries) { '' }
+    elseif ($TagEntries -eq '{}') { "  tags: {}`n" }
+    else { "  tags:`n$TagEntries`n" }
+    $xr = @"
+apiVersion: platform.example.org/v1alpha1
+kind: $Kind
+metadata:
+  name: $name
+  namespace: team-a
+spec:
+$Spec
+$tags
+"@
+    $xrPath = Join-Path $OutputPath "$name.yaml"
+    $validationPath = Join-Path $OutputPath "$name-validation.txt"
+    Set-Content -LiteralPath $xrPath -Value $xr
+    & crossplane resource validate $Definition $xrPath `
+        "--crossplane-image=xpkg.crossplane.io/crossplane/crossplane:$CrossplaneVersion" `
+        --error-on-missing-schemas > $validationPath 2>&1
+    $valid = $LASTEXITCODE -eq 0
+    $validation = Get-Content -LiteralPath $validationPath -Raw
+    if ($valid -ne $ExpectedValid) {
+        throw "Unexpected $Kind tag validation result for $CaseName`: $validation"
+    }
+    if (-not $ExpectedValid -and $validation -notmatch 'Tag keys must be lowercase') {
+        throw "Expected a lowercase tag key validation error for $Kind`: $validation"
+    }
+}
+
 $cases = @(
     @{ Name = 'space-private'; Api = 'space'; XR = 'examples\space-private.yaml' }
     @{ Name = 'space-public'; Api = 'space'; XR = 'examples\space-public.yaml' }
@@ -96,6 +138,7 @@ $cases = @(
             owner = 'platform'
             'managed-by' = 'crossplane'
             environment = 'development'
+            team = 'Team-A'
         }
     }
     @{
@@ -875,7 +918,7 @@ spec:
         if ($valid -ne ($length -eq 128)) {
             throw "Unexpected validation result for a $length-character tag key: $(Get-Content -LiteralPath $validationPath -Raw)"
         }
-        if (-not $valid -and (Get-Content -LiteralPath $validationPath -Raw) -notmatch 'Tag keys must be 1-128 characters') {
+        if (-not $valid -and (Get-Content -LiteralPath $validationPath -Raw) -notmatch 'Tag keys must be lowercase, 1-128 characters') {
             throw "Expected a tag key length validation error: $(Get-Content -LiteralPath $validationPath -Raw)"
         }
     }
@@ -1006,6 +1049,31 @@ spec:
         }
         if (-not $case.Valid -and (Get-Content -LiteralPath $validationPath -Raw) -notmatch $case.Field) {
             throw "Expected LandingZone $($case.Field) validation error: $(Get-Content -LiteralPath $validationPath -Raw)"
+        }
+    }
+
+    Write-Host 'Checking lowercase tag keys across all APIs'
+    $tagApis = @(
+        @{ Kind = 'Space'; Definition = Join-Path $foundation 'apis\space\definition.yaml'; Spec = "  displayName: Development`n  exposure: private" }
+        @{ Kind = 'Network'; Definition = Join-Path $foundation 'apis\network\definition.yaml'; Spec = '  space: development' }
+        @{ Kind = 'Bucket'; Definition = Join-Path $services 'apis\bucket\definition.yaml'; Spec = "  network: private-network`n  containers:`n    - name: data" }
+        @{ Kind = 'SecretStore'; Definition = Join-Path $services 'apis\secretstore\definition.yaml'; Spec = '  network: private-network' }
+        @{ Kind = 'App'; Definition = Join-Path $services 'apis\app\definition.yaml'; Spec = "  network: private-network`n  image: example/app:1" }
+        @{ Kind = 'LandingZone'; Definition = Join-Path $landingZoneApi 'definition.yaml'; Spec = "  displayName: Development`n  exposure: private" }
+    )
+    $tagCases = @(
+        @{ Name = 'mixed-case-value'; Tags = '    owner: Team-A'; Valid = $true }
+        @{ Name = 'empty'; Tags = '{}'; Valid = $true }
+        @{ Name = 'omitted'; Valid = $true }
+        @{ Name = 'uppercase-owner'; Tags = '    Owner: Team-A'; Valid = $false }
+        @{ Name = 'uppercase-cost-center'; Tags = '    CostCenter: Finance'; Valid = $false }
+        @{ Name = 'case-collision'; Tags = "    owner: team-a`n    Owner: Team-A"; Valid = $false }
+    )
+    foreach ($api in $tagApis) {
+        foreach ($case in $tagCases) {
+            $tagEntries = if ($case.ContainsKey('Tags')) { $case.Tags } else { $null }
+            Assert-TagInputValidation $api.Definition $api.Kind $api.Spec $case.Name `
+                $tagEntries $case.Valid $output $crossplaneVersion
         }
     }
 

@@ -3,7 +3,8 @@
 These checks render every composition locally and validate the output against
 schemas. They need no cluster and no Azure credentials, and they **do not test
 live Azure behavior**: permissions, RBAC propagation, policy, DNS, routing and
-deletion order are only exercised by a real deployment.
+deletion order are only exercised by a real deployment. For that, see
+[Live checks](#live-checks).
 
 ## Run all checks
 
@@ -18,10 +19,13 @@ The [test runner](test.ps1) runs with PowerShell 7 on Windows, Linux and macOS.
 It renders all Space, Network, Bucket, SecretStore, App and LandingZone examples
 plus ready-state fixtures, then validates examples and output against the XRDs,
 pinned providers and Crossplane schemas.
+It also checks lowercase tag keys, preserves mixed-case tag values, and verifies
+platform-tag precedence.
 Missing schemas and failed checks return a nonzero exit code.
-Temporary output is removed; downloaded provider schemas and Docker images are cached.
-Each run fetches the namespaced Usage CRD from the pinned Crossplane release on GitHub;
-the first run also needs registry access.
+Temporary output is removed; downloaded provider schemas and Docker images
+are cached.
+Each run fetches the namespaced Usage CRD from the pinned Crossplane release
+on GitHub; the first run also needs registry access.
 
 The runner pins Crossplane `v2.4.3` for rendering. Keep it in sync with the
 Helm chart version in [the deployment guide](../docs/deployment.md#2-install-crossplane).
@@ -149,3 +153,41 @@ dependency Usages and input limits. It also renders the emitted child XRs
 against their compositions and validates the output. These local checks do
 not verify API-server ownership conflicts, update-time immutability, actual
 deletion order, private DNS or Azure behavior.
+
+## Live checks
+
+[live-test.ps1](live-test.ps1) tests a deployed starter pack against the
+cluster and Azure. It needs PowerShell 7, `kubectl` on the platform cluster,
+`az` signed in with read access to the Space subscriptions and the hub, and a
+ready LandingZone (default `development` in `team-a`). Platform settings are
+read from the `azure` EnvironmentConfig.
+
+Run one phase at a time:
+
+```shell
+pwsh -NoProfile -File ./tests/live-test.ps1 -Phase verify
+```
+
+Phases, from safe to destructive:
+
+- `verify` (read-only): checks the LandingZone and its children in Kubernetes
+  and Azure: management group, providers, identity federation, role scope,
+  VNet, hub connection, storage and vault hardening, private endpoints, tags.
+- `negative`: immutable fields, invalid input and Usage-protected deletes as
+  server-side dry runs, plus a short-lived Bucket with a missing Network.
+- `day2`: adds and removes a tag and a container on the LandingZone, checks
+  platform tag precedence and that no managed resource is replaced.
+- `app`: installs the App API if missing, deploys a private and a public App
+  on the LandingZone network and checks settings and reachability.
+- `standalone`: creates Space, Network, Bucket and SecretStore in `team-b`
+  (a new subscription) and checks identity isolation between namespaces.
+- `public`: creates the public LandingZone `production` (a new subscription):
+  online management group, no hub connection, `/23`, GZRS.
+- `delete`: deletes only what `app`, `standalone` and `public` created, and
+  checks deletion order, Kubernetes and Azure cleanup and subscription
+  cancellation.
+
+`app`, `standalone` and `public` create billed resources. `delete` deletes
+their Bucket data and cancels their subscriptions; it leaves the original
+LandingZone alone and checks that it is still ready. Missing private DNS zone
+groups are warnings. Failed checks return a nonzero exit code.

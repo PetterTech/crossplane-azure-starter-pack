@@ -13,6 +13,11 @@ spec:
         metadata:
           labels:
             azure.workload.identity/use: "true"
-  serviceAccountTemplate:
-    metadata:
-      name: provider-azure
+        spec:
+          serviceAccountName: provider-azure
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: provider-azure
+  namespace: crossplane-system

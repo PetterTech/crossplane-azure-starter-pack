@@ -41,12 +41,13 @@ spec:
             {{- if empty $group }}{{ fail (printf "No management group configured for exposure %s" $xr.spec.exposure) }}{{ end }}
             {{- $_ := set $env "managementGroupID" $group }}
             {{- $platformKeys := dict }}
-            {{- range $key, $_ := $env.platformTags }}{{ $_ := set $platformKeys (lower $key) true }}{{ end }}
+            {{- $platformTags := get $env "platformTags" | default dict }}
+            {{- range $key, $_ := $platformTags }}{{ $_ := set $platformKeys (lower $key) true }}{{ end }}
             {{- $tags := dict }}
             {{- range $key, $value := dig "spec" "tags" (dict) $xr }}
             {{- if not (hasKey $platformKeys (lower $key)) }}{{ $_ := set $tags $key $value }}{{ end }}
             {{- end }}
-            {{- $_ := set $env "spaceTags" (mergeOverwrite $tags $env.platformTags) }}
+            {{- $_ := set $env "spaceTags" (mergeOverwrite $tags $platformTags) }}
             ---
             apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
             kind: Context

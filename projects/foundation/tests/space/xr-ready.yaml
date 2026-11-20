@@ -8,7 +8,7 @@ spec:
   exposure: private
   tags:
     environment: development
-    Owner: team-a
+    owner: team-a
 status:
   subscriptionID: "00000000-0000-4000-8000-000000000001"
   identity:

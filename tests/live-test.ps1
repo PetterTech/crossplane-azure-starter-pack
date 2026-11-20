@@ -741,7 +741,7 @@ spec:
             Remove-Foreground space development $StandaloneNamespace
             Assert-Equal @(Get-ManagedNames $StandaloneNamespace '').Count 0 "$StandaloneNamespace has no managed resources, Usages or ProviderConfigs"
             Assert-AzureCleanup $space $network $store
-            Invoke-Tool kubectl @('delete', 'namespace', $StandaloneNamespace) | Write-Host
+            Write-Host "  leaving namespace $StandaloneNamespace intact; it may contain unrelated resources"
         }
 
         if (Test-K8sExists landingzone $publicLandingZone $Namespace) {

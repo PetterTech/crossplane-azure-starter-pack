@@ -379,7 +379,10 @@ kubectl get environmentconfig azure -o yaml
 ```
 
 Nothing validates these values yet. Mistakes show up as errors on the first
-LandingZone, so double-check them now.
+LandingZone, so double-check them now. EnvironmentConfig has no field-level
+validation for `platformTags`; its keys must be lowercase too. Existing API
+manifests with uppercase tag keys (for example `Owner` or `CostCenter`) must
+be updated to lowercase before applying the APIs. Tag values are not changed.
 
 ## 7. Install the APIs
 

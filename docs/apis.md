@@ -16,6 +16,11 @@ A note on the word "exposure": on Space and LandingZone it selects
 **governance placement** (corp or online management group). It does not open or
 close anything on the network. Only App has a network exposure setting.
 
+All six APIs require lowercase tag keys because Azure treats tag names
+case-insensitively while map merges do not. Tag values are passed through
+unchanged. Existing manifests with uppercase tag keys must be updated before
+applying the APIs.
+
 ## Space
 
 A [Space](../projects/foundation/apis/space/definition.yaml) creates a subscription,
@@ -31,7 +36,7 @@ Public inputs are `displayName`, `exposure` and optional `tags`:
 - Exposure is immutable. It controls governance placement, not network access.
 - Up to 40 user tags are merged with up to 10 platform tags from EnvironmentConfig.
   Platform-owned values take precedence over user tags with matching keys.
-  Space matches tag keys case-insensitively.
+  `platformTags` keys must also be lowercase.
 
 Try the [private](../projects/foundation/examples/space-private.yaml) or
 [public](../projects/foundation/examples/space-public.yaml) example in `team-a`.
@@ -71,9 +76,9 @@ when the cluster is rebuilt from Git. The VNet and NSG are named `network`, the
 subnet `default`.
 
 Inputs are `space`, `size` (small `/25`, medium `/24`, large `/23`; default medium)
-and optional `tags`. Space and size are immutable.
-Platform-owned values take precedence over user tags with matching keys.
-Network matches tag keys exactly. There are no credential, subnet or hub switches.
+and optional `tags`. Space and size are immutable. Platform-owned values take
+precedence over user tags with matching keys. There are no credential, subnet or
+hub switches.
 App infrastructure subnets are out of scope.
 
 Networks in private Spaces connect to the platform Virtual WAN hub. Networks in
@@ -116,7 +121,7 @@ Inputs are `network`, `containers` (1-20 names), `geoRedundant` and optional
 `tags`. `geoRedundant: false` (default) keeps copies in three zones (ZRS);
 `true` also copies asynchronously to the paired region (GZRS). Network and
 geoRedundant are immutable. Platform-owned tags take precedence over user tags
-with matching keys.
+with matching keys. Tag keys must be lowercase.
 
 The account has a public endpoint because the provider must reach the data plane
 on create and every read. Access is Microsoft Entra ID only (no shared keys or
@@ -153,8 +158,8 @@ that Network's Space and subnet. It owns a resource group named
 Network subnet.
 
 Inputs are `network` (immutable) and optional `tags`. Platform-owned tags take
-precedence over user tags with matching keys. Region and tenant come from
-EnvironmentConfig.
+precedence over user tags with matching keys. Tag keys must be lowercase.
+Region and tenant come from EnvironmentConfig.
 
 Hardening is fixed: standard SKU, Azure RBAC only, public network access off,
 no trusted-services bypass, purge protection and 90 days of soft delete. VM,
@@ -188,6 +193,7 @@ Inputs are `network`, `image`, `targetPort` (default 8080), `exposure` (default
 private) and optional `tags`. Network and exposure are immutable. Use an explicit
 image version tag other than `latest` or a SHA-256 digest; digests are preferred
 because tags can move. Platform-owned tags override matching user tags.
+Tag keys must be lowercase.
 Azure app names are `ca` plus a hash of subscription, namespace and XR name.
 
 Private exposure disables environment public access and creates a private
@@ -233,7 +239,8 @@ Inputs are `displayName`, `exposure` and these optional fields:
   an empty list is invalid. Removing a container deletes its data.
 - `geoRedundant`: false (default) uses ZRS; true uses GZRS.
 - `tags`: up to 40 entries, with keys up to 128 characters and values up to 256.
-  Tags go to all four children; each child applies platform-owned tag precedence.
+  Keys must be lowercase. Tags go to all four children; each child applies
+  platform-owned tag precedence.
 
 Exposure, networkSize and geoRedundant are immutable. Exposure selects corp
 (`private`) or online (`public`) subscription governance; it does not change

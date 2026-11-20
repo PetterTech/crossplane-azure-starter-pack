@@ -11,3 +11,4 @@ spec:
   tags:
     owner: team-a
     environment: development
+    team: Team-A

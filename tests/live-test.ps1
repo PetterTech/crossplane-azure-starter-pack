@@ -356,9 +356,9 @@ function Assert-AzureCleanup($Space, $Network, $Store) {
 
     Update-AzSubscriptions
     $cancelled = Wait-Until -Minutes 15 {
-        (Invoke-Tool az @('account', 'show', '--subscription', $Subscription, '--query', 'state', '-o', 'tsv', '--only-show-errors')).Trim() -in 'Disabled', 'Deleted'
+        (Invoke-Tool az @('rest', '--method', 'get', '--url', "https://management.azure.com/subscriptions/$Subscription`?api-version=2022-12-01", '--query', 'state', '-o', 'tsv', '--only-show-errors')).Trim() -in 'Disabled', 'Deleted'
     }
-    $state = (Invoke-Tool az @('account', 'show', '--subscription', $Subscription, '--query', 'state', '-o', 'tsv', '--only-show-errors')).Trim()
+    $state = (Invoke-Tool az @('rest', '--method', 'get', '--url', "https://management.azure.com/subscriptions/$Subscription`?api-version=2022-12-01", '--query', 'state', '-o', 'tsv', '--only-show-errors')).Trim()
     Assert-That $cancelled "Subscription is cancelled (state $state)"
 }
 

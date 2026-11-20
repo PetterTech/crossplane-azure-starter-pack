@@ -1,0 +1,11 @@
+apiVersion: platform.example.org/v1alpha1
+kind: App
+metadata:
+  name: hello
+  namespace: team-a
+spec:
+  network: private-network
+  image: ghcr.io/pettertech/demo-app:1.0.2
+  tags:
+    owner: team-a
+    environment: development

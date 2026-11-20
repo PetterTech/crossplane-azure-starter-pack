@@ -1,0 +1,182 @@
+apiVersion: apiextensions.crossplane.io/v1
+kind: Composition
+metadata:
+  name: secretstores.azure.platform.example.org
+spec:
+  compositeTypeRef:
+    apiVersion: platform.example.org/v1alpha1
+    kind: SecretStore
+  mode: Pipeline
+  pipeline:
+    - step: environment
+      functionRef: {name: function-environment-configs}
+      input:
+        apiVersion: environmentconfigs.fn.crossplane.io/v1beta1
+        kind: Input
+        spec:
+          environmentConfigs:
+            - type: Reference
+              ref:
+                name: azure
+    # P&T cannot read other XRs. Resolve the selected Network and its Space.
+    - step: network
+      functionRef: {name: function-go-templating}
+      input:
+        apiVersion: gotemplating.fn.crossplane.io/v1beta1
+        kind: GoTemplate
+        source: Inline
+        inline:
+          template: |
+            {{- $xr := .observed.composite.resource }}
+            {{- $env := index .context "apiextensions.crossplane.io/environment" | default dict }}
+            {{- if or (empty $env.defaultLocation) (empty $env.tenantID) }}
+            {{- fail "EnvironmentConfig azure must provide defaultLocation and tenantID" }}
+            {{- end }}
+            {{- $required := .requiredResources | default dict }}
+            {{- $network := dig "network" "items" (list) $required | first | default dict }}
+            {{- $space := dig "space" "items" (list) $required | first | default dict }}
+            {{- $spaceName := dig "resource" "spec" "space" "" $network }}
+            {{- if and (hasKey $required "network") (empty $network) }}
+            {{- fail (printf "Network %s not found in namespace %s" $xr.spec.network $xr.metadata.namespace) }}
+            {{- end }}
+            {{- if and (hasKey $required "network") (empty $spaceName) }}
+            {{- fail (printf "Network %s must select a Space" $xr.spec.network) }}
+            {{- end }}
+            ---
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: ExtraResources
+            requirements:
+              network:
+                apiVersion: platform.example.org/v1alpha1
+                kind: Network
+                namespace: {{ $xr.metadata.namespace | quote }}
+                matchName: {{ $xr.spec.network | quote }}
+              {{- if $spaceName }}
+              space:
+                apiVersion: platform.example.org/v1alpha1
+                kind: Space
+                namespace: {{ $xr.metadata.namespace | quote }}
+                matchName: {{ $spaceName | quote }}
+              {{- end }}
+            {{- $subnetID := dig "resource" "status" "subnetID" "" $network }}
+            {{- $providerConfigName := dig "resource" "status" "providerConfigName" "" $space }}
+            {{- $subscriptionID := dig "resource" "status" "subscriptionID" "" $space }}
+            {{- if hasKey $required "space" }}
+            {{- if empty $space }}{{ fail (printf "Space %s not found in namespace %s" $spaceName $xr.metadata.namespace) }}{{ end }}
+            {{- if or (empty $subnetID) (empty $providerConfigName) (empty $subscriptionID) }}
+            {{- fail (printf "waiting for Network %s and Space %s to publish status" $xr.spec.network $spaceName) }}
+            {{- end }}
+            {{- $_ := set $env "subnetID" $subnetID }}
+            {{- $_ := set $env "providerConfigName" $providerConfigName }}
+            {{- $_ := set $env "resourceGroupName" (printf "secretstore-%s" $xr.metadata.name) }}
+            {{- $hash := sha256sum (printf "%s/%s/%s" $subscriptionID $xr.metadata.namespace $xr.metadata.name) }}
+            {{- $_ := set $env "vaultName" (printf "kv%s" (trunc 22 $hash)) }}
+            ---
+            apiVersion: meta.gotemplating.fn.crossplane.io/v1alpha1
+            kind: Context
+            data:
+              apiextensions.crossplane.io/environment: {{ $env | toJson }}
+            {{- end }}
+    - step: compose
+      functionRef: {name: function-patch-and-transform}
+      input:
+        apiVersion: pt.fn.crossplane.io/v1beta1
+        kind: Resources
+        patchSets:
+          - name: provider
+            patches: [{type: FromEnvironmentFieldPath, fromFieldPath: providerConfigName, toFieldPath: spec.providerConfigRef.name, policy: {fromFieldPath: Required}}]
+          - name: location
+            patches: [{type: FromEnvironmentFieldPath, fromFieldPath: defaultLocation, toFieldPath: spec.forProvider.location, policy: {fromFieldPath: Required}}]
+          - name: group
+            patches: [{type: FromEnvironmentFieldPath, fromFieldPath: resourceGroupName, toFieldPath: spec.forProvider.resourceGroupName, policy: {fromFieldPath: Required}}]
+          - name: tags
+            patches:
+              - {type: FromEnvironmentFieldPath, fromFieldPath: platformTags, toFieldPath: spec.forProvider.tags}
+              - {type: FromCompositeFieldPath, fromFieldPath: spec.tags, toFieldPath: spec.forProvider.tags, policy: {toFieldPath: MergeObjects}}
+        resources:
+          - name: network-usage
+            base:
+              apiVersion: protection.crossplane.io/v1beta1
+              kind: Usage
+              spec:
+                replayDeletion: true
+                of: {apiVersion: platform.example.org/v1alpha1, kind: Network, resourceRef: {}}
+                reason: A SecretStore uses this Network.
+            patches:
+              - {type: FromCompositeFieldPath, fromFieldPath: spec.network, toFieldPath: spec.of.resourceRef.name}
+            readinessChecks:
+              - type: None
+          - name: resource-group
+            base:
+              apiVersion: azure.m.upbound.io/v1beta1
+              kind: ResourceGroup
+              spec:
+                providerConfigRef: {kind: ProviderConfig}
+            patches:
+              - {type: PatchSet, patchSetName: provider}
+              - {type: PatchSet, patchSetName: location}
+              - {type: PatchSet, patchSetName: tags}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: resourceGroupName, toFieldPath: "metadata.annotations[crossplane.io/external-name]", policy: {fromFieldPath: Required}}
+          - name: vault
+            base:
+              apiVersion: keyvault.azure.m.upbound.io/v1beta1
+              kind: Vault
+              spec:
+                providerConfigRef: {kind: ProviderConfig}
+                forProvider:
+                  skuName: standard
+                  rbacAuthorizationEnabled: true
+                  purgeProtectionEnabled: true
+                  softDeleteRetentionDays: 90
+                  publicNetworkAccessEnabled: false
+                  enabledForDeployment: false
+                  enabledForDiskEncryption: false
+                  enabledForTemplateDeployment: false
+                  networkAcls: {defaultAction: Deny, bypass: None}
+            patches:
+              - {type: PatchSet, patchSetName: provider}
+              - {type: PatchSet, patchSetName: location}
+              - {type: PatchSet, patchSetName: group}
+              - {type: PatchSet, patchSetName: tags}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: tenantID, toFieldPath: spec.forProvider.tenantId, policy: {fromFieldPath: Required}}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: vaultName, toFieldPath: "metadata.annotations[crossplane.io/external-name]", policy: {fromFieldPath: Required}}
+              - {type: ToEnvironmentFieldPath, fromFieldPath: status.atProvider.id, toFieldPath: vaultID}
+              - {type: ToCompositeFieldPath, fromFieldPath: "metadata.annotations[crossplane.io/external-name]", toFieldPath: status.vaultName}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.atProvider.id, toFieldPath: status.resourceID}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.atProvider.vaultUri, toFieldPath: status.vaultURI}
+            readinessChecks:
+              - {type: MatchCondition, matchCondition: {type: Ready, status: "True"}}
+              - {type: NonEmpty, fieldPath: status.atProvider.id}
+          - name: private-endpoint
+            base:
+              apiVersion: network.azure.m.upbound.io/v1beta1
+              kind: PrivateEndpoint
+              spec:
+                providerConfigRef: {kind: ProviderConfig}
+                forProvider:
+                  privateServiceConnection:
+                    name: vault
+                    isManualConnection: false
+                    subresourceNames: [vault]
+            patches:
+              - {type: PatchSet, patchSetName: provider}
+              - {type: PatchSet, patchSetName: location}
+              - {type: PatchSet, patchSetName: group}
+              - {type: PatchSet, patchSetName: tags}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: vaultName, toFieldPath: "metadata.annotations[crossplane.io/external-name]", policy: {fromFieldPath: Required}, transforms: [{type: string, string: {type: Format, fmt: "%s-vault"}}]}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: subnetID, toFieldPath: spec.forProvider.subnetId, policy: {fromFieldPath: Required}}
+              - {type: FromEnvironmentFieldPath, fromFieldPath: vaultID, toFieldPath: spec.forProvider.privateServiceConnection.privateConnectionResourceId, policy: {fromFieldPath: Required}}
+              - {type: ToCompositeFieldPath, fromFieldPath: status.atProvider.id, toFieldPath: status.privateEndpointID}
+    - step: sequence
+      functionRef: {name: function-sequencer}
+      input:
+        apiVersion: sequencer.fn.crossplane.io/v1beta1
+        kind: Input
+        enableDeletionSequencing: true
+        usageVersion: v2
+        replayDeletion: true
+        resetCompositeReadiness: true
+        rules:
+          - sequence: [network-usage, resource-group, vault, private-endpoint]
+    - step: auto-ready
+      functionRef: {name: function-auto-ready}

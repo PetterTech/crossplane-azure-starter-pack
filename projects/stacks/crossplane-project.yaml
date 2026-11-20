@@ -1,0 +1,6 @@
+apiVersion: dev.crossplane.io/v1alpha1
+kind: Project
+metadata:
+  name: stacks
+spec:
+  repository: example.com/my-org/stacks

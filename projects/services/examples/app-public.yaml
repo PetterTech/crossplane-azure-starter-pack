@@ -1,0 +1,13 @@
+apiVersion: platform.example.org/v1alpha1
+kind: App
+metadata:
+  name: hello-public
+  namespace: team-a
+spec:
+  network: private-network
+  image: ghcr.io/pettertech/demo-app:1.0.2
+  exposure: public
+  targetPort: 8080
+  tags:
+    owner: team-a
+    environment: development

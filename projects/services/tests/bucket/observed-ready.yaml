@@ -1,0 +1,56 @@
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: reports-network-usage
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: network-usage}
+---
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceGroup
+metadata:
+  name: reports-group
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: resource-group}
+status:
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: storage.azure.m.upbound.io/v1beta1
+kind: Account
+metadata:
+  name: reports-account
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: account
+    crossplane.io/external-name: stb6858ae51a3bb88cef7fd3
+status:
+  atProvider:
+    id: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/bucket-reports/providers/Microsoft.Storage/storageAccounts/stb6858ae51a3bb88cef7fd3"
+    primaryBlobEndpoint: "https://stb6858ae51a3bb88cef7fd3.blob.core.windows.net/"
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: PrivateEndpoint
+metadata:
+  name: reports-private-endpoint
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: private-endpoint}
+status:
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: storage.azure.m.upbound.io/v1beta1
+kind: Container
+metadata:
+  name: reports-incoming
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: container-incoming}
+status:
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: storage.azure.m.upbound.io/v1beta1
+kind: Container
+metadata:
+  name: reports-archive
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: container-archive}
+status:
+  conditions: [{type: Ready, status: "True"}]

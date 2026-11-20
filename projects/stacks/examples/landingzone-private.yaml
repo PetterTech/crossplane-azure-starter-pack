@@ -1,0 +1,11 @@
+apiVersion: platform.example.org/v1alpha1
+kind: LandingZone
+metadata:
+  name: development
+  namespace: team-a
+spec:
+  displayName: Development
+  exposure: private
+  tags:
+    owner: team-a
+    environment: development

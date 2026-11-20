@@ -1,0 +1,40 @@
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: app-secrets-network-usage
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: network-usage}
+---
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceGroup
+metadata:
+  name: app-secrets-group
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: resource-group}
+status:
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: keyvault.azure.m.upbound.io/v1beta1
+kind: Vault
+metadata:
+  name: app-secrets-vault
+  namespace: team-a
+  annotations:
+    crossplane.io/composition-resource-name: vault
+    crossplane.io/external-name: kv63d0ef1c047e39b0566263
+status:
+  atProvider:
+    id: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/secretstore-app-secrets/providers/Microsoft.KeyVault/vaults/kv63d0ef1c047e39b0566263"
+    vaultUri: "https://kv63d0ef1c047e39b0566263.vault.azure.net/"
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: PrivateEndpoint
+metadata:
+  name: app-secrets-private-endpoint
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: private-endpoint}
+status:
+  atProvider:
+    id: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/secretstore-app-secrets/providers/Microsoft.Network/privateEndpoints/kv63d0ef1c047e39b0566263-vault"
+  conditions: [{type: Ready, status: "True"}]

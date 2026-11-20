@@ -1,0 +1,11 @@
+apiVersion: platform.example.org/v1alpha1
+kind: Space
+metadata:
+  name: development
+  namespace: team-a
+spec:
+  displayName: team-a-development
+  exposure: private
+  tags:
+    environment: development
+    owner: team-a

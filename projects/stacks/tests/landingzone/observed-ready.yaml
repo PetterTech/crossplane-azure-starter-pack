@@ -1,0 +1,64 @@
+# Synthetic child XR statuses, not an Azure configuration to deploy.
+apiVersion: platform.example.org/v1alpha1
+kind: Space
+metadata:
+  name: development
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: space}
+spec:
+  displayName: Development
+  exposure: private
+status:
+  subscriptionID: "00000000-0000-4000-8000-000000000010"
+  providerConfigName: development
+  identity:
+    resourceID: "/subscriptions/00000000-0000-4000-8000-000000000002/resourceGroups/platform-identities/providers/Microsoft.ManagedIdentity/userAssignedIdentities/space-test"
+    clientID: "00000000-0000-4000-8000-000000000003"
+    principalID: "00000000-0000-4000-8000-000000000004"
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: platform.example.org/v1alpha1
+kind: Network
+metadata:
+  name: development
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: network}
+spec:
+  space: development
+  size: medium
+status:
+  resourceID: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/network-development/providers/Microsoft.Network/virtualNetworks/network"
+  addressSpace: [10.20.0.0/24]
+  subnetID: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/network-development/providers/Microsoft.Network/virtualNetworks/network/subnets/default"
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: platform.example.org/v1alpha1
+kind: Bucket
+metadata:
+  name: development
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: bucket}
+spec:
+  network: development
+  geoRedundant: false
+  containers: [{name: default}]
+status:
+  accountName: st0000000000000000000001
+  resourceID: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/bucket-development/providers/Microsoft.Storage/storageAccounts/st0000000000000000000001"
+  blobEndpoint: "https://st0000000000000000000001.blob.core.windows.net/"
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: platform.example.org/v1alpha1
+kind: SecretStore
+metadata:
+  name: development
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: secretstore}
+spec:
+  network: development
+status:
+  vaultName: kv0000000000000000000001
+  resourceID: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/secretstore-development/providers/Microsoft.KeyVault/vaults/kv0000000000000000000001"
+  vaultURI: "https://kv0000000000000000000001.vault.azure.net/"
+  privateEndpointID: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/secretstore-development/providers/Microsoft.Network/privateEndpoints/kv0000000000000000000001-pe"
+  conditions: [{type: Ready, status: "True"}]

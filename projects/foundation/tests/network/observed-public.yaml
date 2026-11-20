@@ -1,0 +1,58 @@
+apiVersion: protection.crossplane.io/v1beta1
+kind: Usage
+metadata:
+  name: public-network-space-usage
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: space-usage}
+---
+apiVersion: azure.m.upbound.io/v1beta1
+kind: ResourceGroup
+metadata:
+  name: public-network-group
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: resource-group}
+status:
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: VirtualNetwork
+metadata:
+  name: public-network
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: vnet}
+status:
+  atProvider:
+    id: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/network-public-network/providers/Microsoft.Network/virtualNetworks/network"
+    addressSpace: [10.21.0.0/25]
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: Subnet
+metadata:
+  name: public-network
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: subnet}
+status:
+  atProvider:
+    id: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/network-public-network/providers/Microsoft.Network/virtualNetworks/network/subnets/default"
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: SecurityGroup
+metadata:
+  name: public-network-nsg
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: nsg}
+status:
+  atProvider:
+    id: "/subscriptions/00000000-0000-4000-8000-000000000010/resourceGroups/network-public-network/providers/Microsoft.Network/networkSecurityGroups/network"
+  conditions: [{type: Ready, status: "True"}]
+---
+apiVersion: network.azure.m.upbound.io/v1beta1
+kind: SubnetNetworkSecurityGroupAssociation
+metadata:
+  name: public-network-association
+  namespace: team-a
+  annotations: {crossplane.io/composition-resource-name: association}
+status:
+  conditions: [{type: Ready, status: "True"}]

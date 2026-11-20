@@ -1,0 +1,16 @@
+apiVersion: platform.example.org/v1alpha1
+kind: LandingZone
+metadata:
+  name: production
+  namespace: team-a
+spec:
+  displayName: Production
+  exposure: public
+  networkSize: large
+  geoRedundant: true
+  containers:
+    - name: incoming
+    - name: archive
+  tags:
+    owner: team-a
+    environment: production
